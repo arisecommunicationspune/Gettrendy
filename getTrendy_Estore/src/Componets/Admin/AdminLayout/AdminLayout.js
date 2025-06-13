@@ -45,7 +45,7 @@ const AdminLayout = ({ children }) => {
       if (filters.category) queryParams += `&category=${filters.category}`
       if (filters.search) queryParams += `&search=${filters.search}`
 
-      const response = await axios.get(`http://localhost:5000/api/products?${queryParams}`, {
+      const response = await axios.get(`http://139.59.3.54:5000/api/products?${queryParams}`, {
         headers: {
           "x-access-token": token,
         },
@@ -64,7 +64,7 @@ const AdminLayout = ({ children }) => {
   const fetchCategories = async () => {
     try {
       const token = localStorage.getItem("token")
-      const response = await axios.get("http://localhost:5000/api/category?limit=100", {
+      const response = await axios.get("http://139.59.3.54:5000/api/category?limit=100", {
         headers: {
           "x-access-token": token,
         },

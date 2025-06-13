@@ -1,7 +1,7 @@
 import axios from "axios";
 
 // API Configuration
-export const BASEURL = "http://localhost:5000";
+export const BASEURL = "http://139.59.3.54/:5000";
 
 // User Roles
 export const UserRoles = {
