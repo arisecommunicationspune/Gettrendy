@@ -20,7 +20,7 @@ const corsOptions = {
   origin: [
     "http://localhost:3000",
     "http://localhost:3001",
-    "http://142.93.220.230:3000",
+    "http://72.60.200.66:3000",
     "https://gettrendy.in",
     "https://www.gettrendy.in",
     "https://api.gettrendy.in",
@@ -151,7 +151,7 @@ app.use((req, res) => {
 });
 
 // Start server
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5001;
 app.listen(PORT, HOST, () => {
   console.log(`🚀 Server listening on http://${HOST}:${PORT}`);
   console.log("📋 Available routes:");
