@@ -1,16 +1,41 @@
-const mongoose = require("mongoose");
+const mongoose = require("mongoose")
 
-const replacementRequestSchema = new mongoose.Schema({
-  orderId: { type: mongoose.Schema.Types.ObjectId, ref: "Order", required: true },
-  userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
-  productId: { type: mongoose.Schema.Types.ObjectId, ref: "Product", required: false },
-  type: { type: String, enum: ["replacement"], default: "replacement" },
-  reason: { type: String, required: true, trim: true },
-  note: { type: String, trim: true },
-  status: { type: String, enum: ["pending", "approved", "rejected"], default: "pending" },
-}, { timestamps: true });
+const replacementRequestSchema = new mongoose.Schema(
+  {
+    orderId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Order",
+      required: true,
+    },
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
+    productId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Product",
+    },
+    reason: {
+      type: String,
+      required: true,
+    },
+    note: {
+      type: String,
+      default: "",
+    },
+    status: {
+      type: String,
+      enum: ["pending", "in_progress", "approved", "rejected", "resolved"],
+      default: "pending",
+    },
+    resolvedAt: {
+      type: Date,
+    },
+  },
+  {
+    timestamps: true,
+  },
+)
 
-// Enforce one replacement per product per order per user
-replacementRequestSchema.index({ orderId: 1, productId: 1, userId: 1 }, { unique: true });
-
-module.exports = mongoose.model("ReplacementRequest", replacementRequestSchema);
+module.exports = mongoose.model("ReplacementRequest", replacementRequestSchema)

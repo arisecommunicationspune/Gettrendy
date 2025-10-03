@@ -1,4 +1,5 @@
 "use client"
+import { useEffect, useState } from "react"
 import { faArrowLeft, faPenToSquare, faPlus, faTrash, faFilter } from "@fortawesome/free-solid-svg-icons"
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome"
 import { AgGridReact } from "ag-grid-react"
@@ -9,9 +10,10 @@ import Loader from "../../Client/Loader/Loader"
 import { Button, Modal, Form, Row, Col, Card, Badge, Tabs, Tab, Table } from "react-bootstrap"
 import { useNavigate, useLocation } from "react-router-dom"
 import ApiService from "../../api/services/api-service"
-import { getImageUrl } from "../../Client/Comman/CommanConstans"
-import { useState } from "react"
-import { useEffect } from "react"
+import { getImageUrl, BASEURL, authUtils } from "../../Client/Comman/CommanConstans"
+import axios from "axios"
+
+const TWO_DAYS_MS = 2 * 24 * 60 * 60 * 1000
 
 const Dashboard = () => {
   const navigate = useNavigate()
@@ -27,37 +29,36 @@ const Dashboard = () => {
   const [unseenOrderCount, setUnseenOrderCount] = useState(0)
   const [orderRefreshKey, setOrderRefreshKey] = useState(0)
   const [currentViewingUserId, setCurrentViewingUserId] = useState(null)
-  // Replacements (admin)
+
+  // Replacements (admin) - keep a single source of truth
   const [replacements, setReplacements] = useState([])
   const [replacementsPage, setReplacementsPage] = useState(1)
   const [replacementsTotalPages, setReplacementsTotalPages] = useState(1)
 
+  // Cancellations (admin) - keep a single source of truth
+  const [cancellations, setCancellations] = useState([])
+  const [cancellationsPage, setCancellationsPage] = useState(1)
+  const [cancellationsTotalPages, setCancellationsTotalPages] = useState(1)
 
-  // Common function to handle back navigation
-  const handleBack = () => {
-    navigate("/")
-  }
+  // Admin create replacement modal (on behalf of user)
+  const [showAdminReplaceModal, setShowAdminReplaceModal] = useState(false)
+  const [adminReplaceReason, setAdminReplaceReason] = useState("")
+  const [adminReplaceNote, setAdminReplaceNote] = useState("")
+  const [adminReplaceOrder, setAdminReplaceOrder] = useState(null)
 
-  // Common function to close message modal
+  const handleBack = () => navigate("/")
   const handleCloseMessage = () => setShowMessage(false)
-
-  // Common function to show message
   const showMessageAlert = (msg) => {
     setMessage(msg)
     setShowMessage(true)
   }
-
-  // Common function to handle delete confirmation
   const handleOpenDelete = (id, type) => {
     setDeleteItemId(id)
     setDeleteItemType(type)
     setShowDeleteModal(true)
   }
-
-  // Common function to close delete modal
   const handleCloseDelete = () => setShowDeleteModal(false)
 
-  // Common function to handle delete
   const handleDelete = async () => {
     try {
       setLoading(true)
@@ -78,7 +79,6 @@ const Dashboard = () => {
       }
       if (response) {
         showMessageAlert(`${deleteItemType.charAt(0).toUpperCase() + deleteItemType.slice(1)} deleted successfully`)
-        // Refresh the appropriate data
         if (deleteItemType === "category") {
           getAllCategories()
         } else if (deleteItemType === "subcategory") {
@@ -95,26 +95,64 @@ const Dashboard = () => {
     }
   }
 
-
-  // Replacement requests (admin)
+  // Replacement requests (admin) — unified via axios
   const fetchReplacements = async (page = replacementsPage) => {
     try {
       setLoading(true)
-      const response = await ApiService.getReplacementRequests(page, 10)
-      if (response?.data) {
-        const rows = response.data.rows || response.data.requests || response.data.data || []
-        setReplacements(rows)
-        setReplacementsTotalPages(response.data.pages_count || 1)
-        // keep page in sync when called with explicit page
-        if (page !== replacementsPage) setReplacementsPage(page)
-      }
+      const token = authUtils.getToken()
+      const res = await axios.get(`${BASEURL}/api/orders/replacements`, {
+        params: { page, limit: 10 },
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const rows = res?.data?.rows || []
+      setReplacements(rows)
+      setReplacementsTotalPages(res?.data?.pages_count || 1)
+      if (page !== replacementsPage) setReplacementsPage(page)
       setLoading(false)
     } catch (error) {
       setLoading(false)
       console.error("Error fetching replacements:", error)
-      showMessageAlert("Error fetching replacements")
+      showMessageAlert(error?.response?.data?.message || "Error fetching replacements")
     }
   }
+
+  // Cancellation requests (admin) — already axios + token
+  const fetchCancellations = async (page = cancellationsPage) => {
+    try {
+      setLoading(true)
+      const token = authUtils.getToken()
+      const res = await axios.get(`${BASEURL}/api/orders/cancellations`, {
+        params: { page, limit: 10 },
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const rows = res?.data?.rows || []
+      setCancellations(rows)
+      setCancellationsTotalPages(res?.data?.pages_count || 1)
+      if (page !== cancellationsPage) setCancellationsPage(page)
+      setLoading(false)
+    } catch (error) {
+      setLoading(false)
+      console.error("Error fetching cancellations:", error)
+      showMessageAlert(error?.response?.data?.message || "Error fetching cancellation requests")
+    }
+  }
+
+  const handleCancellationStatus = async (reqId, status) => {
+    try {
+      const token = authUtils.getToken()
+      await axios.put(
+        `${BASEURL}/api/orders/cancellations/${reqId}/status`,
+        { status },
+        { headers: { Authorization: `Bearer ${token}` } },
+      )
+      showMessageAlert(`Cancellation status updated to ${status}`)
+      fetchCancellations(cancellationsPage)
+    } catch (err) {
+      console.error("Update cancellation status error:", err)
+      showMessageAlert(err?.response?.data?.message || "Failed to update cancellation status")
+    }
+  }
+
   // ==================== CATEGORIES ====================
   const [categories, setCategories] = useState([])
   const [categoryPage, setCategoryPage] = useState(1)
@@ -122,19 +160,8 @@ const Dashboard = () => {
   const [categoryTotalPages, setCategoryTotalPages] = useState(1)
 
   const categoryColumnDefs = [
-    {
-      headerName: "Sr No",
-      field: "sr",
-      sortable: true,
-      filter: true,
-      width: 80,
-    },
-    {
-      headerName: "Category Name",
-      field: "category_name",
-      sortable: true,
-      filter: true,
-    },
+    { headerName: "Sr No", field: "sr", sortable: true, filter: true, width: 80 },
+    { headerName: "Category Name", field: "category_name", sortable: true, filter: true },
     {
       headerName: "Category Image",
       field: "category_image",
@@ -151,12 +178,7 @@ const Dashboard = () => {
         />
       ),
     },
-    {
-      headerName: "Description",
-      field: "category_description",
-      sortable: true,
-      filter: true,
-    },
+    { headerName: "Description", field: "category_description", sortable: true, filter: true },
     {
       headerName: "Action",
       field: "_id",
@@ -205,10 +227,7 @@ const Dashboard = () => {
       showMessageAlert("Error fetching categories")
     }
   }
-
-  const handleCategoryPageChange = (event, value) => {
-    setCategoryPage(value)
-  }
+  const handleCategoryPageChange = (event, value) => setCategoryPage(value)
 
   // ==================== SUBCATEGORIES ====================
   const [subcategories, setSubcategories] = useState([])
@@ -217,55 +236,32 @@ const Dashboard = () => {
   const [subcategoryTotalPages, setSubcategoryTotalPages] = useState(1)
 
   const subcategoryColumnDefs = [
-    {
-      headerName: "Sr No",
-      field: "sr",
-      sortable: true,
-      filter: true,
-      width: 80,
-    },
-    {
-      headerName: "Subcategory Name",
-      field: "subcategory_name",
-      sortable: true,
-      filter: true,
-    },
+    { headerName: "Sr No", field: "sr", sortable: true, filter: true, width: 80 },
+    { headerName: "Subcategory Name", field: "subcategory_name", sortable: true, filter: true },
     {
       headerName: "Parent Category",
       field: "parent_category",
       sortable: true,
       filter: true,
-      valueGetter: (params) => {
-        return params.data.parent_category?.category_name || "N/A"
-      },
+      valueGetter: (params) => params.data.parent_category?.category_name || "N/A",
     },
     {
       headerName: "Image",
       field: "subcategory_logo",
       sortable: false,
       filter: false,
-      cellRenderer: (params) => {
-        console.log("Subcategory data:", params.data)
-        console.log("Image field:", params.data.subcategory_logo)
-        return (
-          <img
-            src={getImageUrl(params.data.subcategory_logo) || "/placeholder.svg"}
-            alt="subcategory"
-            style={{ height: "50px", width: "50px", objectFit: "cover" }}
-            onError={(e) => {
-              console.error("Image load error for:", params.data.subcategory_logo)
-              e.target.src = "/placeholder.svg"
-            }}
-          />
-        )
-      },
+      cellRenderer: (params) => (
+        <img
+          src={getImageUrl(params.data.subcategory_logo) || "/placeholder.svg"}
+          alt="subcategory"
+          style={{ height: "50px", width: "50px", objectFit: "cover" }}
+          onError={(e) => {
+            e.target.src = "/placeholder.svg"
+          }}
+        />
+      ),
     },
-    {
-      headerName: "Description",
-      field: "subcategory_description",
-      sortable: true,
-      filter: true,
-    },
+    { headerName: "Description", field: "subcategory_description", sortable: true, filter: true },
     {
       headerName: "Action",
       field: "_id",
@@ -300,7 +296,6 @@ const Dashboard = () => {
       setLoading(true)
       const response = await ApiService.getSubcategories(subcategoryPage, subcategoryLimit)
       if (response && response.data) {
-        console.log("Subcategories API response:", response.data)
         const dataWithSr = response.data.rows.map((item, index) => ({
           ...item,
           sr: (subcategoryPage - 1) * subcategoryLimit + index + 1,
@@ -315,10 +310,7 @@ const Dashboard = () => {
       showMessageAlert("Error fetching subcategories")
     }
   }
-
-  const handleSubcategoryPageChange = (event, value) => {
-    setSubcategoryPage(value)
-  }
+  const handleSubcategoryPageChange = (event, value) => setSubcategoryPage(value)
 
   // ==================== PRODUCTS ====================
   const [products, setProducts] = useState([])
@@ -338,13 +330,7 @@ const Dashboard = () => {
   const [availableColors, setAvailableColors] = useState([])
 
   const productColumnDefs = [
-    {
-      headerName: "Sr No",
-      field: "sr",
-      sortable: true,
-      filter: true,
-      width: 80,
-    },
+    { headerName: "Sr No", field: "sr", sortable: true, filter: true, width: 80 },
     {
       headerName: "Image",
       field: "images",
@@ -367,12 +353,7 @@ const Dashboard = () => {
         )
       },
     },
-    {
-      headerName: "Product Name",
-      field: "product_name",
-      sortable: true,
-      filter: true,
-    },
+    { headerName: "Product Name", field: "product_name", sortable: true, filter: true },
     {
       headerName: "Price",
       field: "price",
@@ -384,22 +365,11 @@ const Dashboard = () => {
         const hasDiscount = product.discount_price && product.discount_price < product.price
         return (
           <div>
-            <div
-              style={{
-                fontWeight: "bold",
-                color: hasDiscount ? "#28a745" : "#000",
-              }}
-            >
+            <div style={{ fontWeight: "bold", color: hasDiscount ? "#28a745" : "#000" }}>
               ₹{hasDiscount ? product.discount_price.toFixed(2) : product.price.toFixed(2)}
             </div>
             {hasDiscount && (
-              <div
-                style={{
-                  textDecoration: "line-through",
-                  fontSize: "0.8em",
-                  color: "#6c757d",
-                }}
-              >
+              <div style={{ textDecoration: "line-through", fontSize: "0.8em", color: "#6c757d" }}>
                 ₹{product.price.toFixed(2)}
               </div>
             )}
@@ -427,16 +397,9 @@ const Dashboard = () => {
       field: "category",
       sortable: true,
       filter: true,
-      valueGetter: (params) => {
-        return params.data.category?.category_name || "N/A"
-      },
+      valueGetter: (params) => params.data.category?.category_name || "N/A",
     },
-    {
-      headerName: "Stock",
-      field: "stock",
-      sortable: true,
-      filter: true,
-    },
+    { headerName: "Stock", field: "stock", sortable: true, filter: true },
     {
       headerName: "Sizes",
       field: "sizes",
@@ -500,12 +463,8 @@ const Dashboard = () => {
     try {
       const response = await ApiService.getProductFilters()
       if (response?.data?.data) {
-        if (response.data.data.sizes?.length > 0) {
-          setAvailableSizes(response.data.data.sizes)
-        }
-        if (response.data.data.colors?.length > 0) {
-          setAvailableColors(response.data.data.colors)
-        }
+        if (response.data.data.sizes?.length > 0) setAvailableSizes(response.data.data.sizes)
+        if (response.data.data.colors?.length > 0) setAvailableColors(response.data.data.colors)
       }
     } catch (error) {
       console.error("Error fetching filter options:", error)
@@ -516,32 +475,17 @@ const Dashboard = () => {
     const { name, value } = e.target
     setProductFilters((prev) => ({ ...prev, [name]: value }))
   }
-
   const applyProductFilters = () => {
-    setProductPage(1) // Reset to first page when applying filters
+    setProductPage(1)
     fetchProducts()
   }
-
   const resetProductFilters = () => {
-    setProductFilters({
-      size: "",
-      color: "",
-      category: "",
-      search: "",
-      minPrice: "",
-      maxPrice: "",
-    })
-    setProductPage(1) // Reset to first page
+    setProductFilters({ size: "", color: "", category: "", search: "", minPrice: "", maxPrice: "" })
+    setProductPage(1)
     fetchProducts()
   }
-
-  const toggleProductFilters = () => {
-    setShowProductFilters(!showProductFilters)
-  }
-
-  const handleProductPageChange = (event, value) => {
-    setProductPage(value)
-  }
+  const toggleProductFilters = () => setShowProductFilters(!showProductFilters)
+  const handleProductPageChange = (event, value) => setProductPage(value)
 
   // ==================== USERS ====================
   const [users, setUsers] = useState([])
@@ -552,28 +496,18 @@ const Dashboard = () => {
   const [showOrdersModal, setShowOrdersModal] = useState(false)
   const [selectedUserContacts, setSelectedUserContacts] = useState([])
   const [showContactsModal, setShowContactsModal] = useState(false)
-  const [unreadCount, setUnreadCount] = useState(0)
 
-  // Get unseen orders count
   const getUnseenOrdersCount = async () => {
     try {
       const response = await ApiService.getUnseenOrdersCount()
-      if (response && response.data && response.data.success) {
-        setUnseenOrderCount(response.data.count)
-      }
+      if (response && response.data && response.data.success) setUnseenOrderCount(response.data.count)
     } catch (error) {
       console.error("Error fetching unseen orders count:", error)
     }
   }
 
   const userColumnDefs = [
-    {
-      headerName: "Sr No",
-      field: "sr",
-      sortable: true,
-      filter: true,
-      width: 80,
-    },
+    { headerName: "Sr No", field: "sr", sortable: true, filter: true, width: 80 },
     { headerName: "Name", field: "name", sortable: true, filter: true },
     { headerName: "Email", field: "email", sortable: true, filter: true },
     { headerName: "Phone", field: "phone", sortable: true, filter: true },
@@ -588,16 +522,13 @@ const Dashboard = () => {
     {
       headerName: "View Orders",
       field: "_id",
-      cellRenderer: (params) => {
-        console.log("params.value for View Orders:", params.value)
-        return (
-          <ViewOrdersButton
-            userId={params.value}
-            onClick={() => handleViewOrders(params.value)}
-            refreshKey={orderRefreshKey} // Use specific refresh key for orders
-          />
-        )
-      },
+      cellRenderer: (params) => (
+        <ViewOrdersButton
+          userId={params.value}
+          onClick={() => handleViewOrders(params.value)}
+          refreshKey={orderRefreshKey}
+        />
+      ),
       width: 130,
     },
     {
@@ -615,21 +546,14 @@ const Dashboard = () => {
   ]
 
   const handleViewOrders = async (userId) => {
-    console.log("View Orders clicked for userId:", userId)
     setLoading(true)
     try {
-      console.log("About to call ApiService.getOrdersByUser")
       const response = await ApiService.getOrdersByUser(userId)
-      console.log("API response:", response)
-
       if (response && response.data && response.data.orders) {
         setSelectedUserOrders(response.data.orders)
         setShowOrdersModal(true)
-
-        // Store the userId for later use when modal closes
         setCurrentViewingUserId(userId)
       } else {
-        console.error("Invalid response structure:", response)
         showMessageAlert("Error: Invalid response from server")
       }
     } catch (error) {
@@ -646,11 +570,9 @@ const Dashboard = () => {
       if (response && response.data && response.data.contacts) {
         setSelectedUserContacts(response.data.contacts)
         setShowContactsModal(true)
-
-        // Mark contacts as read
         try {
           await ApiService.markContactsAsRead(email)
-          setContactsRefreshKey((k) => k + 1) // trigger badge refresh
+          setContactsRefreshKey((k) => k + 1)
         } catch (markReadError) {
           console.error("Error marking contacts as read:", markReadError)
         }
@@ -664,36 +586,7 @@ const Dashboard = () => {
     setLoading(false)
   }
 
-  const fetchUsers = async () => {
-    console.log("fetchUsers called")
-    try {
-      setLoading(true)
-      const response = await ApiService.getUsers(userPage, userLimit)
-      console.log("Users API response:", response)
-      if (response && response.data && response.data.data) {
-        const dataWithSr = response.data.data.rows.map((item, index) => ({
-          ...item,
-          sr: (userPage - 1) * userLimit + index + 1,
-        }))
-        setUsers(dataWithSr)
-        console.log(dataWithSr)
-        setUserTotalPages(response.data.data.pages_count)
-      }
-      setLoading(false)
-    } catch (error) {
-      setLoading(false)
-      console.error("Error fetching users:", error)
-      showMessageAlert("Error fetching users")
-    }
-  }
-
-  const handleUserPageChange = (event, value) => {
-    setUserPage(value)
-  }
-
-  // Load data based on active tab
   useEffect(() => {
-    console.log("activeTab:", activeTab)
     if (activeTab === "categories") {
       getAllCategories()
     } else if (activeTab === "subcategories") {
@@ -703,51 +596,145 @@ const Dashboard = () => {
       getProductFilterOptions()
     } else if (activeTab === "users") {
       fetchUsers()
-      getUnseenOrdersCount() // Get unseen orders count when users tab is active
+      getUnseenOrdersCount()
     } else if (activeTab === "replacements") {
       fetchReplacements()
+    } else if (activeTab === "cancellations") {
+      fetchCancellations()
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, categoryPage, subcategoryPage, productPage, userPage])
 
-  // Refresh unseen orders count periodically
   useEffect(() => {
     const interval = setInterval(() => {
-      if (activeTab === "users") {
-        getUnseenOrdersCount()
-      }
-    }, 30000) // Check every 30 seconds
-
+      if (activeTab === "users") getUnseenOrdersCount()
+    }, 30000)
     return () => clearInterval(interval)
   }, [activeTab])
 
-  // Default column definition for AG Grid
-  const defaultColDef = {
-    flex: 1,
-    minWidth: 150,
-    resizable: true,
+  const defaultColDef = { flex: 1, minWidth: 150, resizable: true }
+
+  const fetchUsers = async () => {
+    try {
+      setLoading(true)
+      const response = await ApiService.getUsers(userPage, userLimit)
+      if (response && response.data && response.data.data) {
+        const dataWithSr = response.data.data.rows.map((item, index) => ({
+          ...item,
+          sr: (userPage - 1) * userLimit + index + 1,
+        }))
+        setUsers(dataWithSr)
+        setUserTotalPages(response.data.data.pages_count)
+      }
+      setLoading(false)
+    } catch (error) {
+      setLoading(false)
+      console.error("Error fetching users:", error)
+      showMessageAlert("Error fetching users")
+    }
+  }
+  const handleUserPageChange = (event, value) => setUserPage(value)
+
+  const sortedOrders = [...selectedUserOrders].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+
+  const isCancelEligible = (order) => {
+    const created = new Date(order.createdAt).getTime()
+    const now = Date.now()
+    const status = order.orderStatus || order.status
+    if (["shipped", "delivered", "cancelled"].includes(status)) return false
+    return now - created <= TWO_DAYS_MS
   }
 
-  console.log(users)
+  const cancelEligibilityText = (order) => {
+    const created = new Date(order.createdAt).getTime()
+    const deadline = new Date(created + TWO_DAYS_MS)
+    const status = order.orderStatus || order.status
+    if (["cancelled"].includes(status)) return "Cancelled"
+    if (["shipped", "delivered"].includes(status)) return "Not eligible"
+    if (Date.now() > deadline.getTime()) return "Window expired"
+    return `Eligible until ${deadline.toLocaleString()}`
+  }
 
-  // Sort orders by date (newest first)
-  const sortedOrders = [...selectedUserOrders].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+  const handleAdminCancelOrder = async (order) => {
+    try {
+      const token = authUtils.getToken()
+      if (!token) {
+        showMessageAlert("Please login again")
+        return
+      }
+      const status = order.orderStatus || order.status
+      if (["shipped", "delivered", "cancelled"].includes(status)) {
+        showMessageAlert(`Order cannot be cancelled in '${status}' status`)
+        return
+      }
+      await axios.put(
+        `${BASEURL}/api/orders/${order._id}/status`,
+        { status: "cancelled" },
+        { headers: { Authorization: `Bearer ${token}` } },
+      )
+      showMessageAlert("Order cancelled")
+      // refresh orders view
+      const response = await ApiService.getOrdersByUser(order.userId?._id || currentViewingUserId)
+      if (response?.data?.orders) {
+        setSelectedUserOrders(response.data.orders)
+      }
+    } catch (err) {
+      console.error("Admin cancel order error:", err)
+      showMessageAlert(err?.response?.data?.message || "Failed to cancel order")
+    }
+  }
+
+  const openAdminReplaceModal = (order) => {
+    setAdminReplaceOrder(order)
+    setAdminReplaceReason("")
+    setAdminReplaceNote("")
+    setShowAdminReplaceModal(true)
+  }
+  const closeAdminReplaceModal = () => {
+    setShowAdminReplaceModal(false)
+    setAdminReplaceOrder(null)
+    setAdminReplaceReason("")
+    setAdminReplaceNote("")
+  }
+  const submitAdminReplacement = async () => {
+    try {
+      const token = authUtils.getToken()
+      if (!token) {
+        showMessageAlert("Please login again")
+        return
+      }
+      if (!adminReplaceReason) {
+        showMessageAlert("Please select reason")
+        return
+      }
+      const payload = {
+        orderId: adminReplaceOrder._id,
+        userId: adminReplaceOrder.userId?._id || currentViewingUserId,
+        reason: adminReplaceReason,
+        note: adminReplaceNote,
+      }
+      await axios.post(`${BASEURL}/api/orders/replacements`, payload, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      showMessageAlert("Replacement request created")
+      closeAdminReplaceModal()
+      fetchReplacements(1)
+    } catch (err) {
+      console.error("Admin replacement create error:", err)
+      showMessageAlert(err?.response?.data?.message || "Failed to create replacement request")
+    }
+  }
 
   const handleCloseOrdersModal = async () => {
     if (currentViewingUserId) {
       try {
         await ApiService.markOrdersAsSeen(currentViewingUserId)
-        console.log("Orders marked as seen for user:", currentViewingUserId)
-
-        // Force immediate refresh of the badge
         setOrderRefreshKey((prev) => prev + 1)
-
-        // Also refresh the global unseen count
         await getUnseenOrdersCount()
       } catch (markSeenError) {
         console.error("Error marking orders as seen:", markSeenError)
       }
     }
-
     setShowOrdersModal(false)
     setCurrentViewingUserId(null)
   }
@@ -829,7 +816,6 @@ const Dashboard = () => {
               </Button>
             </div>
           </div>
-
           {showProductFilters && (
             <Card className="mb-4">
               <Card.Body>
@@ -920,54 +906,9 @@ const Dashboard = () => {
                     Apply Filters
                   </Button>
                 </div>
-                {/* Active Filters Display */}
-                <div className="mt-3">
-                  <h6>Active Filters:</h6>
-                  <div className="d-flex flex-wrap gap-2">
-                    {productFilters.size && (
-                      <Badge bg="info" className="p-2">
-                        Size: {productFilters.size}
-                      </Badge>
-                    )}
-                    {productFilters.color && (
-                      <Badge bg="info" className="p-2">
-                        Color: {productFilters.color}
-                      </Badge>
-                    )}
-                    {productFilters.category && (
-                      <Badge bg="info" className="p-2">
-                        Category:{" "}
-                        {categories.find((c) => c._id === productFilters.category)?.category_name ||
-                          productFilters.category}
-                      </Badge>
-                    )}
-                    {productFilters.search && (
-                      <Badge bg="info" className="p-2">
-                        Search: {productFilters.search}
-                      </Badge>
-                    )}
-                    {productFilters.minPrice && (
-                      <Badge bg="info" className="p-2">
-                        Min Price: ₹{productFilters.minPrice}
-                      </Badge>
-                    )}
-                    {productFilters.maxPrice && (
-                      <Badge bg="info" className="p-2">
-                        Max Price: ₹{productFilters.maxPrice}
-                      </Badge>
-                    )}
-                    {!productFilters.size &&
-                      !productFilters.color &&
-                      !productFilters.category &&
-                      !productFilters.search &&
-                      !productFilters.minPrice &&
-                      !productFilters.maxPrice && <span className="text-muted">No active filters</span>}
-                  </div>
-                </div>
               </Card.Body>
             </Card>
           )}
-
           <div className="ag-theme-quartz" style={{ height: 500, width: "100%" }}>
             <AgGridReact
               rowData={products}
@@ -1021,9 +962,17 @@ const Dashboard = () => {
                       <td>{req.reason || "-"}</td>
                       <td>{req.note || "-"}</td>
                       <td>
-                        <Badge bg={
-                          req.status === "resolved" ? "success" : req.status === "in_progress" ? "info" : req.status === "rejected" ? "danger" : "warning"
-                        }>
+                        <Badge
+                          bg={
+                            req.status === "resolved"
+                              ? "success"
+                              : req.status === "in_progress"
+                                ? "info"
+                                : req.status === "rejected"
+                                  ? "danger"
+                                  : "warning"
+                          }
+                        >
                           {req.status || "pending"}
                         </Badge>
                       </td>
@@ -1033,10 +982,15 @@ const Dashboard = () => {
                           variant="secondary"
                           onClick={async () => {
                             try {
-                              await ApiService.updateReplacementStatus(req._id, { status: "in_progress" })
+                              const token = authUtils.getToken()
+                              await axios.put(
+                                `${BASEURL}/api/orders/replacements/${req._id}/status`,
+                                { status: "in_progress" },
+                                { headers: { Authorization: `Bearer ${token}` } },
+                              )
                               fetchReplacements(replacementsPage)
                             } catch (e) {
-                              showMessageAlert("Failed to update status")
+                              showMessageAlert(e?.response?.data?.message || "Failed to update status")
                             }
                           }}
                         >
@@ -1047,24 +1001,34 @@ const Dashboard = () => {
                           variant="success"
                           onClick={async () => {
                             try {
-                              await ApiService.updateReplacementStatus(req._id, { status: "resolved" })
+                              const token = authUtils.getToken()
+                              await axios.put(
+                                `${BASEURL}/api/orders/replacements/${req._id}/status`,
+                                { status: "approved" },
+                                { headers: { Authorization: `Bearer ${token}` } },
+                              )
                               fetchReplacements(replacementsPage)
                             } catch (e) {
-                              showMessageAlert("Failed to update status")
+                              showMessageAlert(e?.response?.data?.message || "Failed to update status")
                             }
                           }}
                         >
-                          Resolve
+                          Approve
                         </Button>
                         <Button
                           size="sm"
                           variant="danger"
                           onClick={async () => {
                             try {
-                              await ApiService.updateReplacementStatus(req._id, { status: "rejected" })
+                              const token = authUtils.getToken()
+                              await axios.put(
+                                `${BASEURL}/api/orders/replacements/${req._id}/status`,
+                                { status: "rejected" },
+                                { headers: { Authorization: `Bearer ${token}` } },
+                              )
                               fetchReplacements(replacementsPage)
                             } catch (e) {
-                              showMessageAlert("Failed to update status")
+                              showMessageAlert(e?.response?.data?.message || "Failed to update status")
                             }
                           }}
                         >
@@ -1075,7 +1039,9 @@ const Dashboard = () => {
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={8} className="text-center">No replacement requests found.</td>
+                    <td colSpan={8} className="text-center">
+                      No replacement requests found.
+                    </td>
                   </tr>
                 )}
               </tbody>
@@ -1086,6 +1052,97 @@ const Dashboard = () => {
               count={replacementsTotalPages}
               page={replacementsPage}
               onChange={(e, p) => fetchReplacements(p)}
+              color="primary"
+            />
+          </div>
+        </Tab>
+
+        <Tab eventKey="cancellations" title="Cancel-Requests">
+          <div className="d-flex justify-content-between align-items-center mb-3">
+            <h3>Cancellation Requests</h3>
+          </div>
+          <div className="table-responsive">
+            <Table striped bordered hover responsive>
+              <thead>
+                <tr>
+                  <th>Request ID</th>
+                  <th>Order ID</th>
+                  <th>User</th>
+                  <th>Requested At</th>
+                  <th>Reason</th>
+                  <th>Note</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {cancellations && cancellations.length > 0 ? (
+                  cancellations.map((req) => (
+                    <tr key={req._id}>
+                      <td>{req._id}</td>
+                      <td>{req.orderId?.orderId || "-"}</td>
+                      <td>
+                        {req.userId?.name || "N/A"}
+                        {req.userId?.email ? <span> ({req.userId.email})</span> : null}
+                      </td>
+                      <td>{req.createdAt ? new Date(req.createdAt).toLocaleString() : "N/A"}</td>
+                      <td>{req.reason || "-"}</td>
+                      <td>{req.note || "-"}</td>
+                      <td>
+                        <Badge
+                          bg={
+                            req.status === "approved"
+                              ? "success"
+                              : req.status === "in_progress"
+                                ? "info"
+                                : req.status === "rejected"
+                                  ? "danger"
+                                  : "warning"
+                          }
+                        >
+                          {req.status || "pending"}
+                        </Badge>
+                      </td>
+                      <td className="d-flex gap-2">
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => handleCancellationStatus(req._id, "in_progress")}
+                        >
+                          In Progress
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="success"
+                          onClick={() => handleCancellationStatus(req._id, "approved")}
+                        >
+                          Approve Cancel
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="danger"
+                          onClick={() => handleCancellationStatus(req._id, "rejected")}
+                        >
+                          Reject
+                        </Button>
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={8} className="text-center">
+                      No cancellation requests found.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </Table>
+          </div>
+          <div className="d-flex justify-content-center mt-3">
+            <Pagination
+              count={cancellationsTotalPages}
+              page={cancellationsPage}
+              onChange={(e, p) => fetchCancellations(p)}
               color="primary"
             />
           </div>
@@ -1110,8 +1167,6 @@ const Dashboard = () => {
         </Tab>
       </Tabs>
 
-      
-
       {/* Delete Confirmation Modal */}
       <Modal show={showDeleteModal} onHide={handleCloseDelete}>
         <Modal.Header closeButton>
@@ -1131,7 +1186,7 @@ const Dashboard = () => {
       {/* Message Modal */}
       <Modal show={showMessage} onHide={handleCloseMessage}>
         <Modal.Header closeButton>
-          <Modal.Title>{message.includes("Error") ? "Error" : "Success"}</Modal.Title>
+          <Modal.Title>{message.includes("Error") ? "Error" : "Info"}</Modal.Title>
         </Modal.Header>
         <Modal.Body>{message}</Modal.Body>
         <Modal.Footer>
@@ -1156,85 +1211,104 @@ const Dashboard = () => {
                   <th>Total Amount</th>
                   <th>Payment Status</th>
                   <th>Order Status</th>
+                  <th>Cancel Eligibility</th>
+                  <th>Actions</th>
                   <th>Address</th>
                   <th>Products</th>
                 </tr>
               </thead>
               <tbody>
-                {sortedOrders.map((order) => (
-                  <tr key={order.orderId || order._id}>
-                    <td>{order.orderId || order._id}</td>
-                    <td>{order.createdAt ? new Date(order.createdAt).toLocaleString() : "N/A"}</td>
-                    <td>₹{order.totalAmount}</td>
-                    <td>
-                      <Badge bg={order.paymentStatus === "paid" ? "success" : "warning"}>{order.paymentStatus}</Badge>
-                    </td>
-                    <td>
-                      <Badge bg={order.orderStatus === "delivered" ? "success" : "info"}>
-                        {order.orderStatus || order.status}
-                      </Badge>
-                    </td>
-                    <td>
-                      {order.address
-                        ? `${order.address.fullName}, ${order.address.street}, ${order.address.city}, ${order.address.postcode}, ${order.address.country} (Phone: ${order.address.phone})`
-                        : "N/A"}
-                    </td>
-                    <td>
-                      <Table size="sm" bordered>
-                        <thead>
-                          <tr>
-                            <th>Image</th>
-                            <th>Name</th>
-                            <th>Quantity</th>
-                            <th>Price</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {order.items.map((item, idx) => (
-                            <tr key={idx}>
-                              <td>
-                                {item.productId && item.productId.images && item.productId.images[0] ? (
-                                  <img
-                                    src={getImageUrl(item.productId.images[0]) || "/placeholder.svg"}
-                                    alt={item.productName}
-                                    style={{
-                                      width: 50,
-                                      height: 50,
-                                      objectFit: "cover",
-                                      marginRight: 10,
-                                      borderRadius: 4,
-                                    }}
-                                  />
-                                ) : (
-                                  <img
-                                    src="/placeholder.svg"
-                                    alt="No product"
-                                    style={{
-                                      width: 50,
-                                      height: 50,
-                                      objectFit: "cover",
-                                      marginRight: 10,
-                                      borderRadius: 4,
-                                    }}
-                                  />
-                                )}
-                              </td>
-                              <td>
-                                <strong>{item.productName}</strong>
-                                <br />
-                                <small>
-                                  Size: {item.size} | Color: {item.color}
-                                </small>
-                              </td>
-                              <td>{item.quantity}</td>
-                              <td>₹{item.price}</td>
+                {sortedOrders.map((order) => {
+                  const s = order.orderStatus || order.status
+                  const statusBg =
+                    s === "delivered" ? "success" : s === "shipped" ? "info" : s === "cancelled" ? "danger" : "warning"
+                  return (
+                    <tr key={order.orderId || order._id}>
+                      <td>{order.orderId || order._id}</td>
+                      <td>{order.createdAt ? new Date(order.createdAt).toLocaleString() : "N/A"}</td>
+                      <td>₹{order.totalAmount}</td>
+                      <td>
+                        <Badge bg={order.paymentStatus === "paid" ? "success" : "warning"}>{order.paymentStatus}</Badge>
+                      </td>
+                      <td>
+                        <Badge bg={statusBg}>{s}</Badge>
+                      </td>
+                      <td>{cancelEligibilityText(order)}</td>
+                      <td className="d-flex flex-column gap-2">
+                        <Button
+                          size="sm"
+                          variant="danger"
+                          onClick={() => handleAdminCancelOrder(order)}
+                          disabled={["shipped", "delivered", "cancelled"].includes(s)}
+                        >
+                          Cancel
+                        </Button>
+                        <Button size="sm" variant="warning" onClick={() => openAdminReplaceModal(order)}>
+                          Replace
+                        </Button>
+                      </td>
+                      <td>
+                        {order.address
+                          ? `${order.address.fullName}, ${order.address.street}, ${order.address.city}, ${order.address.postcode}, ${order.address.country} (Phone: ${order.address.phone})`
+                          : "N/A"}
+                      </td>
+                      <td>
+                        <Table size="sm" bordered>
+                          <thead>
+                            <tr>
+                              <th>Image</th>
+                              <th>Name</th>
+                              <th>Quantity</th>
+                              <th>Price</th>
                             </tr>
-                          ))}
-                        </tbody>
-                      </Table>
-                    </td>
-                  </tr>
-                ))}
+                          </thead>
+                          <tbody>
+                            {order.items.map((item, idx) => (
+                              <tr key={idx}>
+                                <td>
+                                  {item.productId && item.productId.images && item.productId.images[0] ? (
+                                    <img
+                                      src={getImageUrl(item.productId.images[0]) || "/placeholder.svg"}
+                                      alt={item.productName}
+                                      style={{
+                                        width: 50,
+                                        height: 50,
+                                        objectFit: "cover",
+                                        marginRight: 10,
+                                        borderRadius: 4,
+                                      }}
+                                    />
+                                  ) : (
+                                    <img
+                                      src="/placeholder.svg"
+                                      alt="No product"
+                                      style={{
+                                        width: 50,
+                                        height: 50,
+                                        objectFit: "cover",
+                                        marginRight: 10,
+                                        borderRadius: 4,
+                                      }}
+                                    />
+                                  )}
+                                </td>
+                                <td>
+                                  <strong>{item.productName}</strong>
+                                  <br />
+                                  <small>
+                                    Size: {item.size} | Color: {item.color}
+                                  </small>
+                                </td>
+                                <td>{item.quantity}</td>
+                                <td>₹{item.price}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </Table>
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </Table>
           ) : (
@@ -1245,46 +1319,44 @@ const Dashboard = () => {
         </Modal.Body>
       </Modal>
 
-      {/* Contact Messages Modal */}
-      <Modal show={showContactsModal} onHide={() => setShowContactsModal(false)} size="lg">
-        <Modal.Header closeButton>
-          <Modal.Title>User Contact Messages</Modal.Title>
-        </Modal.Header>
-        <Modal.Body>
-          {selectedUserContacts.length > 0 ? (
-            <Table striped bordered hover responsive>
-              <thead>
-                <tr>
-                  <th>Name</th>
-                  <th>Email</th>
-                  <th>Subject</th>
-                  <th>Message</th>
-                  <th>Date</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {selectedUserContacts.map((msg) => (
-                  <tr key={msg._id}>
-                    <td>{msg.name}</td>
-                    <td>{msg.email}</td>
-                    <td>{msg.subject || "No Subject"}</td>
-                    <td>{msg.message}</td>
-                    <td>{new Date(msg.createdAt).toLocaleString()}</td>
-                    <td>
-                      <Badge bg={msg.read ? "success" : "warning"}>{msg.read ? "Read" : "Unread"}</Badge>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </Table>
-          ) : (
-            <div className="text-center py-4">
-              <p>No contact messages found for this user.</p>
-            </div>
-          )}
-        </Modal.Body>
-      </Modal>
+      {/* Admin Create Replacement Modal */}
+      {showAdminReplaceModal && (
+        <Modal show onHide={closeAdminReplaceModal}>
+          <Modal.Header closeButton>
+            <Modal.Title>Create Replacement Request</Modal.Title>
+          </Modal.Header>
+          <Modal.Body>
+            <Form.Group className="mb-3">
+              <Form.Label>Reason</Form.Label>
+              <Form.Select value={adminReplaceReason} onChange={(e) => setAdminReplaceReason(e.target.value)}>
+                <option value="">Select a reason</option>
+                <option value="Damaged/Defective product">Damaged/Defective product</option>
+                <option value="Wrong item delivered">Wrong item delivered</option>
+                <option value="Size/fit issue">Size/fit issue</option>
+                <option value="Other">Other</option>
+              </Form.Select>
+            </Form.Group>
+            <Form.Group className="mb-0">
+              <Form.Label>Additional note (optional)</Form.Label>
+              <Form.Control
+                as="textarea"
+                rows={3}
+                placeholder="Add any details that help process the replacement"
+                value={adminReplaceNote}
+                onChange={(e) => setAdminReplaceNote(e.target.value)}
+              />
+            </Form.Group>
+          </Modal.Body>
+          <Modal.Footer>
+            <Button variant="secondary" onClick={closeAdminReplaceModal}>
+              Close
+            </Button>
+            <Button variant="primary" onClick={submitAdminReplacement} disabled={!adminReplaceReason}>
+              Submit
+            </Button>
+          </Modal.Footer>
+        </Modal>
+      )}
     </div>
   )
 }
@@ -1292,7 +1364,6 @@ const Dashboard = () => {
 // Component for View Orders Button with notification badge
 const ViewOrdersButton = ({ userId, onClick, refreshKey }) => {
   const [unreadCount, setUnreadCount] = useState(0)
-  const [hasOrders, setHasOrders] = useState(false)
   const [allRead, setAllRead] = useState(false)
 
   useEffect(() => {
@@ -1303,17 +1374,12 @@ const ViewOrdersButton = ({ userId, onClick, refreshKey }) => {
           const orders = response.data.orders
           const unread = orders.filter((order) => !order.seenByAdmin).length
           setUnreadCount(unread)
-          setHasOrders(orders.length > 0)
           setAllRead(orders.length > 0 && unread === 0)
-          console.log(
-            `User ${userId} - Total orders: ${orders.length}, Unread: ${unread}, All read: ${orders.length > 0 && unread === 0}`,
-          )
         }
       } catch (error) {
         console.error("Error fetching user orders for badge:", error)
       }
     }
-
     fetchUnreadOrders()
   }, [userId, refreshKey])
 
@@ -1330,7 +1396,6 @@ const ViewOrdersButton = ({ userId, onClick, refreshKey }) => {
   )
 }
 
-// Component for View Contact Messages Button with notification badge
 const ViewContactMessagesButton = ({ email, onClick, refreshKey }) => {
   const [unreadCount, setUnreadCount] = useState(0)
 
@@ -1338,7 +1403,6 @@ const ViewContactMessagesButton = ({ email, onClick, refreshKey }) => {
     const fetchUnreadContacts = async () => {
       try {
         const response = await ApiService.getContactsByEmail(email)
-        console.log("Badge fetch for", email, response)
         if (response && response.data && response.data.contacts) {
           const unread = response.data.contacts.filter((msg) => !msg.read).length
           setUnreadCount(unread)
@@ -1347,7 +1411,6 @@ const ViewContactMessagesButton = ({ email, onClick, refreshKey }) => {
         console.error("Error fetching contacts for badge:", error)
       }
     }
-
     fetchUnreadContacts()
   }, [email, refreshKey])
 

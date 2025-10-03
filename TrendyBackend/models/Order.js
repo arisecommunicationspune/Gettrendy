@@ -14,9 +14,11 @@ const orderSchema = new mongoose.Schema(
     },
     userName: {
       type: String,
+      required: true,
     },
     userEmail: {
       type: String,
+      required: true,
     },
     items: [
       {
@@ -55,21 +57,20 @@ const orderSchema = new mongoose.Schema(
     paymentMethod: {
       type: String,
       required: true,
-      enum: ["CASH", "UPI", "RAZORPAY"],
+      enum: ["CASH", "ONLINE", "COD"],
+      default: "CASH",
     },
     paymentStatus: {
       type: String,
-      required: true,
-      enum: ["pending", "paid", "failed", "refunded"],
-      default: "pending",
-    },
-    orderStatus: {
-      type: String,
-      required: true,
-      enum: ["pending", "processing", "shipped", "delivered", "cancelled"],
+      enum: ["pending", "paid", "failed"],
       default: "pending",
     },
     status: {
+      type: String,
+      enum: ["pending", "processing", "shipped", "delivered", "cancelled"],
+      default: "pending",
+    },
+    orderStatus: {
       type: String,
       enum: ["pending", "processing", "shipped", "delivered", "cancelled"],
       default: "pending",
@@ -83,16 +84,12 @@ const orderSchema = new mongoose.Schema(
         type: String,
         required: true,
       },
-      apartment: {
-        type: String,
-      },
+      apartment: String,
       city: {
         type: String,
         required: true,
       },
-      state: {
-        type: String,
-      },
+      state: String,
       postcode: {
         type: String,
         required: true,
@@ -110,35 +107,15 @@ const orderSchema = new mongoose.Schema(
         default: "India",
       },
     },
-    notes: {
-      type: String,
-    },
-    // Razorpay specific fields
-    razorpayOrderId: {
-      type: String,
-    },
-    razorpayPaymentId: {
-      type: String,
-    },
-    razorpaySignature: {
-      type: String,
-    },
-    // Shiprocket specific fields
-    shiprocketOrderId: {
-      type: String,
-    },
-    shiprocketShipmentId: {
-      type: String,
-    },
-    trackingNumber: {
-      type: String,
-    },
-    // Notification fields
+    notes: String,
+    razorpayOrderId: String,
+    razorpayPaymentId: String,
+    razorpaySignature: String,
+    shiprocketOrderId: String,
+    shiprocketShipmentId: String,
+    trackingNumber: String,
+    cancelledAt: Date,
     seenByAdmin: {
-      type: Boolean,
-      default: false,
-    },
-    adminNotified: {
       type: Boolean,
       default: false,
     },
@@ -146,7 +123,10 @@ const orderSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
-    // Email status
+    adminNotified: {
+      type: Boolean,
+      default: false,
+    },
     userEmailSent: {
       type: Boolean,
       default: false,
@@ -160,10 +140,5 @@ const orderSchema = new mongoose.Schema(
     timestamps: true,
   },
 )
-
-// Add indexes for better query performance
-orderSchema.index({ userId: 1, createdAt: -1 })
-orderSchema.index({ razorpayOrderId: 1 })
-orderSchema.index({ seenByAdmin: 1 })
 
 module.exports = mongoose.model("Order", orderSchema)

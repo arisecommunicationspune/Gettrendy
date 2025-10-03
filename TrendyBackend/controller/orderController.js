@@ -8,16 +8,27 @@ const shiprocketService = require("../services/shiprocketService")
 const { sendOrderConfirmationToUser, sendNewOrderNotificationToAdmin } = require("../services/emailService")
 const crypto = require("crypto")
 const ReplacementRequest = require("../models/ReplacementRequest")
+const CancellationRequest = require("../models/CancellationRequest")
 
-// ===============================
-// PLACE ORDER
-// ===============================
+const TWO_DAYS_MS = 2 * 24 * 60 * 60 * 1000
+
+function isOrderCancelEligible(order) {
+  const currentStatus = order.orderStatus || order.status
+  if (["shipped", "delivered", "cancelled"].includes(currentStatus)) {
+    return { ok: false, reason: currentStatus }
+  }
+  const created = new Date(order.createdAt).getTime()
+  if (Date.now() - created > TWO_DAYS_MS) {
+    return { ok: false, reason: "window_expired" }
+  }
+  return { ok: true }
+}
+
 const placeOrder = async (req, res) => {
   try {
     const userId = req.user._id
     const { items, totalAmount, paymentMethod, address, notes } = req.body
 
-    // ✅ Validate inputs
     if (!items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ success: false, message: "Order items are required" })
     }
@@ -28,23 +39,23 @@ const placeOrder = async (req, res) => {
       return res.status(400).json({ success: false, message: "Complete address information is required" })
     }
 
-    // ✅ Get user
     const user = await User.findById(userId)
-    if (!user) return res.status(404).json({ success: false, message: "User not found" })
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User not found" })
+    }
 
-    // ✅ Validate products
     for (const item of items) {
       if (!mongoose.Types.ObjectId.isValid(item.productId)) {
         return res.status(400).json({ success: false, message: `Invalid product ID: ${item.productId}` })
       }
       const product = await Product.findById(item.productId)
-      if (!product) return res.status(404).json({ success: false, message: `Product not found: ${item.productName}` })
+      if (!product) {
+        return res.status(404).json({ success: false, message: `Product not found: ${item.productName}` })
+      }
     }
 
-    // ✅ Generate order ID
     const orderId = `ORD${Date.now()}${Math.floor(Math.random() * 1000)}`
 
-    // ✅ Create order in DB
     const order = new Order({
       orderId,
       userId,
@@ -62,6 +73,7 @@ const placeOrder = async (req, res) => {
       paymentMethod: paymentMethod || "CASH",
       paymentStatus: paymentMethod === "CASH" ? "paid" : "pending",
       status: "pending",
+      orderStatus: "pending",
       address: {
         fullName: address.fullName,
         street: address.street,
@@ -78,7 +90,6 @@ const placeOrder = async (req, res) => {
 
     await order.save()
 
-    // ✅ COD Orders → Immediately confirm + Shiprocket
     if (paymentMethod === "CASH") {
       try {
         const emailToSend = address.email || user.email
@@ -95,36 +106,37 @@ const placeOrder = async (req, res) => {
 
       try {
         const shiprocketPayload = {
-         order_id: order.orderId,
-    order_date: new Date().toISOString(),
-    pickup_location: "warehouse", // must match your Shiprocket pickup
-    billing_customer_name: String(order.address.fullName),
-    billing_last_name: "",
-    billing_address: String(order.address.street),
-    billing_city: String(order.address.city),
-    billing_pincode: String(order.address.postcode),
-    billing_state: String(order.address.state),
-    billing_country: String(order.address.country),
-    billing_email: String(order.address.email),
-    billing_phone: String(order.address.phone),
-    order_items: order.items.map((i) => ({
-      name: String(i.productName),
-      sku: typeof i.productId === "object" && i.productId !== null && i.productId._id
-        ? String(i.productId._id)
-        : String(i.productId),
-      units: Number(i.quantity),
-      selling_price: Number(i.price),
-    })),
-    payment_method: "COD",
-    sub_total: Number(order.totalAmount),
-    length: 10,
+          order_id: order.orderId,
+          order_date: new Date().toISOString(),
+          pickup_location: "warehouse",
+          billing_customer_name: String(order.address.fullName),
+          billing_last_name: "",
+          billing_address: String(order.address.street),
+          billing_city: String(order.address.city),
+          billing_pincode: String(order.address.postcode),
+          billing_state: String(order.address.state),
+          billing_country: String(order.address.country),
+          billing_email: String(order.address.email),
+          billing_phone: String(order.address.phone),
+          order_items: order.items.map((i) => ({
+            name: String(i.productName),
+            sku:
+              typeof i.productId === "object" && i.productId !== null && i.productId._id
+                ? String(i.productId._id)
+                : String(i.productId),
+            units: Number(i.quantity),
+            selling_price: Number(i.price),
+          })),
+          payment_method: "COD",
+          sub_total: Number(order.totalAmount),
+          length: 10,
           breadth: 10,
           height: 10,
           weight: 1.0,
         }
 
         const shipRes = await shiprocketService.createOrder(shiprocketPayload)
-        if (shipRes?.order_id) {
+        if (shipRes && shipRes.order_id) {
           order.shiprocketOrderId = shipRes.order_id
           order.shiprocketShipmentId = shipRes.shipment_id
           order.trackingNumber = shipRes.awb_code
@@ -135,7 +147,6 @@ const placeOrder = async (req, res) => {
       }
     }
 
-    // ✅ Clear cart
     await Cart.findOneAndDelete({ userId })
 
     res.status(201).json({
@@ -150,14 +161,10 @@ const placeOrder = async (req, res) => {
   }
 }
 
-// ===============================
-// VERIFY RAZORPAY PAYMENT
-// ===============================
 const verifyPayment = async (req, res) => {
   try {
     const { orderId, razorpayOrderId, razorpayPaymentId, razorpaySignature } = req.body
 
-    // ✅ Verify Razorpay signature
     const expectedSignature = crypto
       .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
       .update(razorpayOrderId + "|" + razorpayPaymentId)
@@ -167,9 +174,10 @@ const verifyPayment = async (req, res) => {
       return res.status(400).json({ success: false, message: "Invalid Razorpay signature" })
     }
 
-    // ✅ Update order
     const order = await Order.findOne({ orderId })
-    if (!order) return res.status(404).json({ success: false, message: "Order not found" })
+    if (!order) {
+      return res.status(404).json({ success: false, message: "Order not found" })
+    }
 
     order.paymentStatus = "paid"
     order.razorpayOrderId = razorpayOrderId
@@ -177,7 +185,6 @@ const verifyPayment = async (req, res) => {
     order.razorpaySignature = razorpaySignature
     await order.save()
 
-    // ✅ Send Emails
     const emailToSend = order.address.email || order.userEmail
     await sendOrderConfirmationToUser(emailToSend, order)
     await sendNewOrderNotificationToAdmin(order)
@@ -187,39 +194,39 @@ const verifyPayment = async (req, res) => {
     order.adminNotified = true
     await order.save()
 
-    // ✅ Sync Shiprocket
     try {
       const shiprocketPayload = {
         order_id: String(order.orderId),
-    order_date: new Date().toISOString(),
-    pickup_location: "warehouse",
-    billing_customer_name: String(order.address.fullName),
-    billing_last_name: "",
-    billing_address: String(order.address.street),
-    billing_city: String(order.address.city),
-    billing_pincode: String(order.address.postcode),
-    billing_state: String(order.address.state),
-    billing_country: String(order.address.country),
-    billing_email: String(order.address.email),
-    billing_phone: String(order.address.phone),
-    order_items: order.items.map((i) => ({
-      name: String(i.productName),
-      sku: typeof i.productId === "object" && i.productId !== null && i.productId._id
-        ? String(i.productId._id)
-        : String(i.productId),
-      units: Number(i.quantity),
-      selling_price: Number(i.price),
-    })),
-    payment_method: "Prepaid",
-    sub_total: Number(order.totalAmount),
-    length: 10,
+        order_date: new Date().toISOString(),
+        pickup_location: "warehouse",
+        billing_customer_name: String(order.address.fullName),
+        billing_last_name: "",
+        billing_address: String(order.address.street),
+        billing_city: String(order.address.city),
+        billing_pincode: String(order.address.postcode),
+        billing_state: String(order.address.state),
+        billing_country: String(order.address.country),
+        billing_email: String(order.address.email),
+        billing_phone: String(order.address.phone),
+        order_items: order.items.map((i) => ({
+          name: String(i.productName),
+          sku:
+            typeof i.productId === "object" && i.productId !== null && i.productId._id
+              ? String(i.productId._id)
+              : String(i.productId),
+          units: Number(i.quantity),
+          selling_price: Number(i.price),
+        })),
+        payment_method: "Prepaid",
+        sub_total: Number(order.totalAmount),
+        length: 10,
         breadth: 10,
         height: 10,
         weight: 1.0,
       }
 
       const shipRes = await shiprocketService.createOrder(shiprocketPayload)
-      if (shipRes?.order_id) {
+      if (shipRes && shipRes.order_id) {
         order.shiprocketOrderId = shipRes.order_id
         order.shiprocketShipmentId = shipRes.shipment_id
         order.trackingNumber = shipRes.awb_code
@@ -236,7 +243,216 @@ const verifyPayment = async (req, res) => {
   }
 }
 
-// Get user's orders
+const cancelOrderByUser = async (req, res) => {
+  try {
+    console.log("=== cancelOrderByUser ===")
+    const userId = req.user._id
+    const { orderId } = req.params
+    console.log("userId:", userId)
+    console.log("orderId:", orderId)
+
+    const order = await Order.findOne({
+      userId,
+      $or: [{ orderId: orderId }, { _id: orderId }],
+    })
+
+    if (!order) {
+      return res.status(404).json({ success: false, message: "Order not found" })
+    }
+
+    const eligible = isOrderCancelEligible(order)
+    if (!eligible.ok) {
+      const msg =
+        eligible.reason === "window_expired"
+          ? "Cancellation window (2 days) has expired"
+          : `Order cannot be cancelled in '${eligible.reason}' status`
+      return res.status(400).json({ success: false, message: msg })
+    }
+
+    order.status = "cancelled"
+    order.orderStatus = "cancelled"
+    order.cancelledAt = new Date()
+    await order.save()
+
+    return res.json({ success: true, message: "Order cancelled successfully", order })
+  } catch (err) {
+    console.error("cancelOrderByUser error:", err)
+    res.status(500).json({ success: false, message: "Failed to cancel order" })
+  }
+}
+
+const createCancellationRequest = async (req, res) => {
+  try {
+    console.log("=== createCancellationRequest START ===")
+    const userId = req.user._id
+    const { orderId } = req.params
+    const { reason, note } = req.body
+
+    console.log("Request params:", { userId, orderId, reason, note })
+
+    if (!reason || reason.trim().length < 3) {
+      console.log("Validation failed: reason too short")
+      return res.status(400).json({ success: false, message: "Reason is required (min 3 chars)" })
+    }
+
+    const order = await Order.findOne({
+      userId,
+      $or: [{ _id: orderId }, { orderId }],
+    })
+
+    console.log("Order found:", order ? order._id : "NOT FOUND")
+
+    if (!order) {
+      console.log("Order not found in database")
+      return res.status(404).json({ success: false, message: "Order not found" })
+    }
+
+    const eligible = isOrderCancelEligible(order)
+    console.log("Eligibility:", eligible)
+
+    if (!eligible.ok) {
+      const msg =
+        eligible.reason === "window_expired"
+          ? "Cancellation window (2 days) has expired"
+          : `Order cannot be cancelled in '${eligible.reason}' status`
+      console.log("Not eligible:", msg)
+      return res.status(400).json({ success: false, message: msg })
+    }
+
+    const existing = await CancellationRequest.findOne({ orderId: order._id, userId })
+    console.log("Existing request:", existing ? existing._id : "NONE")
+
+    if (existing) {
+      console.log("Request already exists")
+      return res.status(400).json({ success: false, message: "Cancellation request already submitted for this order" })
+    }
+
+    const reqDoc = await CancellationRequest.create({
+      orderId: order._id,
+      userId,
+      reason,
+      note: note || "",
+      status: "pending",
+    })
+
+    console.log("Cancellation request created successfully:", reqDoc._id)
+    console.log("=== createCancellationRequest END ===")
+
+    return res.status(201).json({ success: true, message: "Cancellation request created", data: reqDoc })
+  } catch (error) {
+    console.error("=== createCancellationRequest ERROR ===", error)
+    return res
+      .status(500)
+      .json({ success: false, message: "Failed to create cancellation request", error: error.message })
+  }
+}
+
+const getMyCancellationRequests = async (req, res) => {
+  try {
+    console.log("=== getMyCancellationRequests ===")
+    const userId = req.user._id
+    console.log("userId:", userId)
+
+    const rows = await CancellationRequest.find({ userId })
+      .populate({ path: "orderId", select: "orderId createdAt totalAmount status orderStatus" })
+      .sort({ createdAt: -1 })
+
+    console.log("Found cancellation requests:", rows.length)
+
+    return res.json({ success: true, rows })
+  } catch (error) {
+    console.error("getMyCancellationRequests error:", error)
+    return res
+      .status(500)
+      .json({ success: false, message: "Failed to get cancellation requests", error: error.message })
+  }
+}
+
+const getCancellationRequests = async (req, res) => {
+  try {
+    console.log("=== getCancellationRequests (admin) ===")
+    const page = Number(req.query.page) || 1
+    const limit = Number(req.query.limit) || 10
+    const skip = (page - 1) * limit
+
+    console.log("Query params:", { page, limit, skip })
+
+    const rows = await CancellationRequest.find({})
+      .populate({ path: "orderId", select: "orderId totalAmount createdAt userId status orderStatus" })
+      .populate({ path: "userId", select: "name email" })
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+
+    const count = await CancellationRequest.countDocuments()
+
+    console.log("Found admin cancellation requests:", rows.length, "total:", count)
+
+    return res.json({ success: true, rows, count, pages_count: Math.ceil(count / limit), current_page: page })
+  } catch (error) {
+    console.error("getCancellationRequests error:", error)
+    return res
+      .status(500)
+      .json({ success: false, message: "Failed to fetch cancellation requests", error: error.message })
+  }
+}
+
+const updateCancellationStatus = async (req, res) => {
+  try {
+    const { id } = req.params
+    const { status } = req.body
+
+    if (!["pending", "in_progress", "approved", "rejected"].includes(status)) {
+      return res.status(400).json({ success: false, message: "Invalid status" })
+    }
+
+    const doc = await CancellationRequest.findById(id).populate({ path: "orderId" })
+    if (!doc) {
+      return res.status(404).json({ success: false, message: "Cancellation request not found" })
+    }
+
+    if (status === "approved") {
+      const order = doc.orderId
+      if (!order) {
+        return res.status(404).json({ success: false, message: "Order not found for this request" })
+      }
+
+      const eligible = isOrderCancelEligible(order)
+      if (!eligible.ok) {
+        const msg =
+          eligible.reason === "window_expired"
+            ? "Cancellation window (2 days) has expired"
+            : `Order cannot be cancelled in '${eligible.reason}' status`
+        return res.status(400).json({ success: false, message: msg })
+      }
+
+      order.status = "cancelled"
+      order.orderStatus = "cancelled"
+      order.cancelledAt = new Date()
+      await order.save()
+
+      doc.status = "approved"
+      doc.resolvedAt = new Date()
+      await doc.save()
+
+      return res.json({ success: true, message: "Request approved and order cancelled", request: doc })
+    }
+
+    doc.status = status
+    if (status === "rejected" || status === "approved") {
+      doc.resolvedAt = new Date()
+    } else {
+      doc.resolvedAt = undefined
+    }
+    await doc.save()
+
+    return res.json({ success: true, request: doc })
+  } catch (error) {
+    console.error("updateCancellationStatus error:", error)
+    return res.status(500).json({ success: false, message: "Failed to update cancellation request" })
+  }
+}
+
 const getUserOrders = async (req, res) => {
   try {
     const userId = req.user._id
@@ -244,15 +460,11 @@ const getUserOrders = async (req, res) => {
     const limit = Number.parseInt(req.query.limit) || 10
     const skip = (page - 1) * limit
 
-    console.log("Getting orders for user:", userId)
-
     const orders = await Order.find({ userId })
       .populate("items.productId")
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)
-
-    console.log("Found orders:", orders.length)
 
     const totalOrders = await Order.countDocuments({ userId })
     const totalPages = Math.ceil(totalOrders / limit)
@@ -274,13 +486,10 @@ const getUserOrders = async (req, res) => {
   }
 }
 
-// Get order by ID
 const getOrderById = async (req, res) => {
   try {
     const { orderId } = req.params
     const userId = req.user._id
-
-    console.log("Getting order by ID:", orderId, "for user:", userId)
 
     const order = await Order.findOne({
       $or: [{ _id: orderId }, { orderId: orderId }],
@@ -294,10 +503,7 @@ const getOrderById = async (req, res) => {
       })
     }
 
-    res.status(200).json({
-      success: true,
-      data: order,
-    })
+    res.status(200).json({ success: true, data: order })
   } catch (error) {
     console.error("Get order by ID error:", error)
     res.status(500).json({
@@ -308,7 +514,6 @@ const getOrderById = async (req, res) => {
   }
 }
 
-// Update order status (admin only)
 const updateOrderStatus = async (req, res) => {
   try {
     const { orderId } = req.params
@@ -322,8 +527,16 @@ const updateOrderStatus = async (req, res) => {
       })
     }
 
-    if (status) order.status = status
-    if (paymentStatus) order.paymentStatus = paymentStatus
+    if (status) {
+      order.status = status
+      order.orderStatus = status
+      if (status === "cancelled") {
+        order.cancelledAt = new Date()
+      }
+    }
+    if (paymentStatus) {
+      order.paymentStatus = paymentStatus
+    }
 
     await order.save()
 
@@ -342,15 +555,10 @@ const updateOrderStatus = async (req, res) => {
   }
 }
 
-// Get all orders for a specific user (admin function)
 const getOrdersByUser = async (req, res) => {
   try {
     const userId = req.params.userId
-    console.log("Fetching orders for userId:", userId)
-
-    const orders = await Order.find({ userId }).populate("items.productId")
-    console.log("Found orders for user:", orders.length)
-
+    const orders = await Order.find({ userId }).populate("items.productId").sort({ createdAt: -1 })
     res.json({ success: true, orders })
   } catch (error) {
     console.error("getOrdersByUser error:", error)
@@ -358,16 +566,9 @@ const getOrdersByUser = async (req, res) => {
   }
 }
 
-// Get all orders (admin only)
 const getAllOrders = async (req, res) => {
   try {
-    const orders = await Order.find({})
-      .populate("userId") // To get user info
-      .populate("items.productId") // To get product info
-      .sort({ createdAt: -1 })
-
-    console.log("Total orders found:", orders.length)
-
+    const orders = await Order.find({}).populate("userId").populate("items.productId").sort({ createdAt: -1 })
     res.status(200).json({ success: true, orders })
   } catch (error) {
     console.error("Get all orders error:", error)
@@ -375,7 +576,6 @@ const getAllOrders = async (req, res) => {
   }
 }
 
-// Mark all orders for a user as seen by admin
 const markOrdersAsSeen = async (req, res) => {
   try {
     const { userId } = req.params
@@ -390,7 +590,6 @@ const markOrdersAsSeen = async (req, res) => {
   }
 }
 
-// Get unseen orders count for admin notifications
 const getUnseenOrdersCount = async (req, res) => {
   try {
     const count = await Order.countDocuments({ seenByAdmin: false })
@@ -413,11 +612,9 @@ const downloadReceipt = async (req, res) => {
       return res.status(404).json({ success: false, message: "Order not found" })
     }
 
-    // Set response headers
     res.setHeader("Content-Type", "application/pdf")
     res.setHeader("Content-Disposition", `attachment; filename=receipt_${orderId}.pdf`)
 
-    // Create PDF
     const doc = new PDFDocument()
     doc.pipe(res)
 
@@ -451,14 +648,10 @@ const downloadReceipt = async (req, res) => {
   }
 }
 
-// Create Shiprocket order
 const createShiprocketOrder = async (req, res) => {
   try {
-    console.log("Creating Shiprocket order with data:", req.body)
-
     const orderData = req.body
 
-    // Validate required fields
     if (!orderData.order_id || !orderData.billing_customer_name || !orderData.billing_phone) {
       return res.status(400).json({
         success: false,
@@ -468,7 +661,6 @@ const createShiprocketOrder = async (req, res) => {
 
     const result = await shiprocketService.createOrder(orderData)
 
-    // Update the order with Shiprocket details if successful
     if (result && result.order_id) {
       try {
         await Order.findOneAndUpdate(
@@ -479,7 +671,6 @@ const createShiprocketOrder = async (req, res) => {
             trackingNumber: result.awb_code,
           },
         )
-        console.log("Order updated with Shiprocket details")
       } catch (updateError) {
         console.error("Error updating order with Shiprocket details:", updateError)
       }
@@ -495,90 +686,141 @@ const createShiprocketOrder = async (req, res) => {
   }
 }
 
-// ===============================
-// REPLACEMENT REQUESTS (Top-level)
-// ===============================
-
-// Create a replacement request for an order
 const createReplacementRequest = async (req, res) => {
   try {
-    const userId = req.user._id;
-    const { orderId } = req.params;
-    const { productId, reason, note } = req.body;
+    const userId = req.user._id
+    const { orderId } = req.params
+    const { productId, reason, note } = req.body
 
-    const existing = await ReplacementRequest.findOne({ orderId, productId, userId });
-    if (existing) {
-      return res.status(400).json({ success: false, message: "This product has already been replaced" });
+    if (!reason || reason.trim().length < 3) {
+      return res.status(400).json({ success: false, message: "Reason is required (min 3 chars)" })
     }
 
-    const request = await ReplacementRequest.create({ orderId, productId, userId, reason, note });
-    return res.status(201).json({ success: true, message: "Replacement request created", data: request });
+    const order = await Order.findOne({
+      $or: [{ _id: orderId }, { orderId }],
+      userId,
+    })
+    if (!order) {
+      return res.status(404).json({ success: false, message: "Order not found" })
+    }
+
+    const existing = await ReplacementRequest.findOne({
+      orderId: order._id,
+      productId: productId || null,
+      userId,
+    })
+    if (existing) {
+      return res.status(400).json({ success: false, message: "This product/order already has a replacement request" })
+    }
+
+    const request = await ReplacementRequest.create({
+      orderId: order._id,
+      productId: productId || undefined,
+      userId,
+      reason,
+      note: note || "",
+    })
+    return res.status(201).json({ success: true, message: "Replacement request created", data: request })
   } catch (error) {
-    console.error(error);
-    return res.status(500).json({ success: false, message: "Failed to create replacement request" });
+    console.error("createReplacementRequest error:", error)
+    return res.status(500).json({ success: false, message: "Failed to create replacement request" })
   }
-};
+}
 
+const createReplacementForUser = async (req, res) => {
+  try {
+    const { orderId, userId, productId, reason, note } = req.body
+    if (!orderId || !userId || !reason || reason.trim().length < 3) {
+      return res.status(400).json({ success: false, message: "orderId, userId and reason (min 3 chars) are required" })
+    }
 
-// List replacement requests (admin)
+    let orderRef = orderId
+    if (!mongoose.isValidObjectId(orderId)) {
+      const orderDoc = await Order.findOne({ orderId })
+      if (!orderDoc) {
+        return res.status(404).json({ success: false, message: "Order not found" })
+      }
+      orderRef = orderDoc._id
+    }
+
+    const existing = await ReplacementRequest.findOne({
+      orderId: orderRef,
+      productId: productId || null,
+      userId,
+    })
+    if (existing) {
+      return res.status(400).json({ success: false, message: "Replacement already exists for this order/product/user" })
+    }
+
+    const request = await ReplacementRequest.create({
+      orderId: orderRef,
+      userId,
+      productId: productId || undefined,
+      reason,
+      note: note || "",
+    })
+
+    return res.status(201).json({ success: true, message: "Replacement request created (admin)", data: request })
+  } catch (error) {
+    console.error("createReplacementForUser error:", error)
+    return res.status(500).json({ success: false, message: "Failed to create replacement request" })
+  }
+}
+
 const getReplacementRequests = async (req, res) => {
-  const page = Number(req.query.page) || 1;
-  const limit = Number(req.query.limit) || 10;
-  const skip = (page - 1) * limit;
+  const page = Number(req.query.page) || 1
+  const limit = Number(req.query.limit) || 10
+  const skip = (page - 1) * limit
 
-  const [rows, count] = await Promise.all([
-    ReplacementRequest.find({})
-      .populate({ path: "orderId", select: "orderId totalAmount createdAt" })
+  try {
+    const rows = await ReplacementRequest.find({})
+      .populate({ path: "orderId", select: "orderId totalAmount createdAt userId" })
       .populate({ path: "userId", select: "name email" })
       .sort({ createdAt: -1 })
       .skip(skip)
-      .limit(limit),
-    ReplacementRequest.countDocuments()
-  ]);
+      .limit(limit)
 
-  return res.json({ success: true, rows, count, pages_count: Math.ceil(count / limit), current_page: page });
-};
+    const count = await ReplacementRequest.countDocuments()
 
+    return res.json({ success: true, rows, count, pages_count: Math.ceil(count / limit), current_page: page })
+  } catch (err) {
+    console.error("getReplacementRequests error:", err)
+    return res.status(500).json({ success: false, message: "Failed to fetch replacement requests" })
+  }
+}
 
-// Update replacement request status (admin)
-// PUT /api/admin/replacements/:id
-// PUT /api/orders/replacements/:id/status
 const updateReplacementStatus = async (req, res) => {
   try {
-    const { id } = req.params;
-    const { status } = req.body; // pending, approved, rejected
+    const { id } = req.params
+    const { status } = req.body
 
-    const replacement = await ReplacementRequest.findByIdAndUpdate(
-      id,
-      { status },
-      { new: true }
-    );
+    const allowed = ["pending", "in_progress", "approved", "rejected", "resolved"]
+    if (!allowed.includes(status)) {
+      return res.status(400).json({ success: false, message: "Invalid status" })
+    }
 
-    return res.json({ success: true, replacement });
+    const replacement = await ReplacementRequest.findByIdAndUpdate(id, { status }, { new: true })
+    return res.json({ success: true, replacement })
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ success: false, message: err.message });
+    console.error("updateReplacementStatus error:", err)
+    res.status(500).json({ success: false, message: err.message })
   }
-};
+}
 
-
-
-// Get replacement requests for the logged-in user
 const getMyReplacementRequests = async (req, res) => {
   try {
-    const userId = req.user._id;
+    const userId = req.user._id
 
     const requests = await ReplacementRequest.find({ userId })
       .populate({ path: "orderId", select: "orderId totalAmount createdAt" })
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
 
-    return res.json({ success: true, data: requests });
+    return res.json({ success: true, data: requests })
   } catch (error) {
-    console.error("getMyReplacementRequests error:", error);
-    return res.status(500).json({ success: false, message: "Failed to get replacement requests" });
+    console.error("getMyReplacementRequests error:", error)
+    return res.status(500).json({ success: false, message: "Failed to get replacement requests" })
   }
-};
-
+}
 
 module.exports = {
   placeOrder,
@@ -592,8 +834,13 @@ module.exports = {
   getUnseenOrdersCount,
   downloadReceipt,
   createShiprocketOrder,
-
+  cancelOrderByUser,
+  createCancellationRequest,
+  getMyCancellationRequests,
+  getCancellationRequests,
+  updateCancellationStatus,
   createReplacementRequest,
+  createReplacementForUser,
   getReplacementRequests,
   updateReplacementStatus,
   getMyReplacementRequests,

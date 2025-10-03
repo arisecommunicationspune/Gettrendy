@@ -1,14 +1,16 @@
-/* eslint-disable react/jsx-key */
 "use client"
 import { useEffect, useState } from "react"
 import { AgGridReact } from "ag-grid-react"
 import "ag-grid-community/styles/ag-grid.css"
 import "ag-grid-community/styles/ag-theme-quartz.css"
+import axios from "axios"
 import { BASEURL, authUtils, getImageUrl } from "../Comman/CommanConstans"
 import Footer from "../Footer/Footer"
 import { Pagination, Stack } from "@mui/material"
 import { toast } from "react-toastify"
-import axios from "axios"
+
+const TWO_DAYS_MS = 2 * 24 * 60 * 60 * 1000
+const FIVE_DAYS_MS = 5 * 24 * 60 * 60 * 1000
 
 const MyOrders = () => {
   const [allOrders, setAllOrders] = useState([])
@@ -17,37 +19,49 @@ const MyOrders = () => {
   const [totalPages, setTotalPages] = useState(1)
   const [limit, setLimit] = useState(10)
   const [page, setPage] = useState(1)
+
   const [showReplaceModal, setShowReplaceModal] = useState(false)
-  const [selectedOrderId, setSelectedOrderId] = useState(null)
+  const [selectedOrderIdForReplace, setSelectedOrderIdForReplace] = useState(null)
   const [replaceReason, setReplaceReason] = useState("")
   const [replaceNote, setReplaceNote] = useState("")
   const [myReplacementOrderIds, setMyReplacementOrderIds] = useState(new Set())
   const [replacementStatuses, setReplacementStatuses] = useState({})
 
+  const [showCancelModal, setShowCancelModal] = useState(false)
+  const [selectedOrderIdForCancel, setSelectedOrderIdForCancel] = useState(null)
+  const [cancelReason, setCancelReason] = useState("")
+  const [cancelNote, setCancelNote] = useState("")
+  const [myCancellationOrderIds, setMyCancellationOrderIds] = useState(new Set())
+  const [cancellationStatuses, setCancellationStatuses] = useState({})
+
   const getDisplayStatus = (status) => {
     if (!status) return "in progress"
     const s = String(status).toLowerCase()
-    if (s === "approved") return "resolved"
+    if (s === "approved") return "approved"
     if (s === "pending") return "in progress"
-    return s // rejected or any other server-provided status
+    return s
   }
 
-  // check if order is within 5 days
-  const isReturnEligible = (createdAt) => {
+  const isReplaceEligible = (createdAt) => {
     if (!createdAt) return false
-    const orderDate = new Date(createdAt)
-    const currentDate = new Date()
-    const diffInDays = Math.floor((currentDate - orderDate) / (1000 * 60 * 60 * 24))
-    return diffInDays <= 5
+    const orderDate = new Date(createdAt).getTime()
+    return Date.now() - orderDate <= FIVE_DAYS_MS
   }
 
-  // open replacement modal only if not already requested
+  const isCancelEligible = (order) => {
+    const created = new Date(order.createdAt).getTime()
+    const now = Date.now()
+    const status = order.orderStatus || order.status
+    if (["shipped", "delivered", "cancelled"].includes(status)) return false
+    return now - created <= TWO_DAYS_MS
+  }
+
   const openReplaceModal = (orderId) => {
     if (myReplacementOrderIds.has(String(orderId))) {
       toast.info("You have already requested replacement for this order.")
       return
     }
-    setSelectedOrderId(orderId)
+    setSelectedOrderIdForReplace(orderId)
     setReplaceReason("")
     setReplaceNote("")
     setShowReplaceModal(true)
@@ -55,37 +69,45 @@ const MyOrders = () => {
 
   const closeReplaceModal = () => {
     setShowReplaceModal(false)
-    setSelectedOrderId(null)
+    setSelectedOrderIdForReplace(null)
     setReplaceReason("")
     setReplaceNote("")
   }
 
+  const openCancelModal = (orderId) => {
+    if (myCancellationOrderIds.has(String(orderId))) {
+      toast.info("You have already submitted a cancellation request for this order.")
+      return
+    }
+    setSelectedOrderIdForCancel(orderId)
+    setCancelReason("")
+    setCancelNote("")
+    setShowCancelModal(true)
+  }
+
+  const closeCancelModal = () => {
+    setShowCancelModal(false)
+    setSelectedOrderIdForCancel(null)
+    setCancelReason("")
+    setCancelNote("")
+  }
+
   const submitReplacement = async () => {
     try {
-      if (!selectedOrderId) return
+      if (!selectedOrderIdForReplace) return
       if (!replaceReason || replaceReason.trim().length < 3) {
         toast.warning("Please provide a brief reason for replacement (min 3 chars)")
         return
       }
-
       const token = authUtils.getToken()
       if (!token) {
         toast.error("Please login to submit a replacement request")
         return
       }
-
-      const payload = {
-        type: "replacement",
-        reason: replaceReason,
-        note: replaceNote,
-      }
-
-      const response = await axios.post(`${BASEURL}/api/orders/return/${selectedOrderId}`, payload, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+      const payload = { reason: replaceReason, note: replaceNote }
+      const response = await axios.post(`${BASEURL}/api/orders/return/${selectedOrderIdForReplace}`, payload, {
+        headers: { Authorization: `Bearer ${token}` },
       })
-
       if (response.data?.success) {
         toast.success("Replacement request submitted successfully")
         closeReplaceModal()
@@ -96,11 +118,52 @@ const MyOrders = () => {
       }
     } catch (error) {
       console.error("Replacement request error:", error)
-      if (error.response?.data?.message) {
-        toast.error(error.response.data.message)
-      } else {
-        toast.error("Failed to submit replacement request")
+      toast.error(error.response?.data?.message || "Failed to submit replacement request")
+    }
+  }
+
+  const submitCancellation = async () => {
+    try {
+      console.log("=== submitCancellation START ===")
+      if (!selectedOrderIdForCancel) {
+        console.log("No order selected")
+        return
       }
+      if (!cancelReason || cancelReason.trim().length < 3) {
+        toast.warning("Please provide a brief reason for cancellation (min 3 chars)")
+        return
+      }
+      const token = authUtils.getToken()
+      if (!token) {
+        toast.error("Please login to submit a cancellation request")
+        return
+      }
+
+      const payload = { reason: cancelReason, note: cancelNote }
+      console.log("Sending cancellation request:", {
+        url: `${BASEURL}/api/orders/${selectedOrderIdForCancel}/cancel-request`,
+        payload,
+      })
+
+      const response = await axios.post(`${BASEURL}/api/orders/${selectedOrderIdForCancel}/cancel-request`, payload, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+
+      console.log("Cancellation response:", response.data)
+
+      if (response.data?.success) {
+        toast.success("Cancellation request submitted successfully")
+        closeCancelModal()
+        await fetchMyCancellations()
+        getAllOrders()
+      } else {
+        toast.error(response.data?.message || "Failed to submit cancellation request")
+      }
+    } catch (error) {
+      console.error("Cancellation request error:", error)
+      console.error("Error response:", error.response?.data)
+      console.error("Error status:", error.response?.status)
+      toast.error(error.response?.data?.message || "Failed to submit cancellation request")
     }
   }
 
@@ -111,21 +174,16 @@ const MyOrders = () => {
       const res = await axios.get(`${BASEURL}/api/orders/replacements/my`, {
         headers: { Authorization: `Bearer ${token}` },
       })
-
-      // Controller returns { success: true, data: requests }
       const list = res?.data?.data || res?.data?.rows || []
       const ids = new Set()
       const statuses = {}
-
       list.forEach((r) => {
-        // r.orderId may be an ObjectId string or populated object with _id
         const orderKey = String(r?.orderId?._id || r?.orderId)
         if (orderKey) {
           ids.add(orderKey)
           statuses[orderKey] = r?.status || "pending"
         }
       })
-
       setMyReplacementOrderIds(ids)
       setReplacementStatuses(statuses)
     } catch (err) {
@@ -133,14 +191,32 @@ const MyOrders = () => {
     }
   }
 
+  const fetchMyCancellations = async () => {
+    try {
+      const token = authUtils.getToken()
+      if (!token) return
+      const res = await axios.get(`${BASEURL}/api/orders/cancellations/my`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const list = res?.data?.rows || []
+      const ids = new Set()
+      const statuses = {}
+      list.forEach((r) => {
+        const orderKey = String(r?.orderId?._id || r?.orderId)
+        if (orderKey) {
+          ids.add(orderKey)
+          statuses[orderKey] = r?.status || "pending"
+        }
+      })
+      setMyCancellationOrderIds(ids)
+      setCancellationStatuses(statuses)
+    } catch (err) {
+      console.error("Failed to fetch my cancellation requests", err)
+    }
+  }
+
   const columnDefs = [
-    {
-      headerName: "Sr No",
-      field: "sr",
-      sortable: true,
-      filter: true,
-      width: 80,
-    },
+    { headerName: "Sr No", field: "sr", sortable: true, filter: true, width: 80 },
     {
       headerName: "Product Images",
       field: "items",
@@ -155,48 +231,25 @@ const MyOrders = () => {
               <img
                 src="/placeholder.svg"
                 alt="No products"
-                style={{
-                  width: 40,
-                  height: 40,
-                  objectFit: "cover",
-                  borderRadius: 4,
-                }}
+                style={{ width: 40, height: 40, objectFit: "cover", borderRadius: 4 }}
               />
             </div>
           )
         }
-
         const imagesToShow = items.slice(0, 3)
-
         return (
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              height: "100%",
-              gap: "4px",
-              flexWrap: "wrap",
-            }}
-          >
+          <div style={{ display: "flex", alignItems: "center", height: "100%", gap: "4px", flexWrap: "wrap" }}>
             {imagesToShow.map((item, index) => {
               let imageUrl = "/placeholder.svg"
-
               if (item.productId && item.productId.images && item.productId.images.length > 0) {
                 imageUrl = getImageUrl(item.productId.images[0])
               }
-
               return (
                 <img
                   key={index}
                   src={imageUrl || "/placeholder.svg"}
                   alt={item.productName || "Product"}
-                  style={{
-                    width: 35,
-                    height: 35,
-                    objectFit: "cover",
-                    borderRadius: 4,
-                    border: "1px solid #ddd",
-                  }}
+                  style={{ width: 35, height: 35, objectFit: "cover", borderRadius: 4, border: "1px solid #ddd" }}
                   onError={(e) => {
                     e.target.src = "/placeholder.svg"
                   }}
@@ -204,15 +257,7 @@ const MyOrders = () => {
               )
             })}
             {items.length > 3 && (
-              <span
-                style={{
-                  fontSize: "12px",
-                  color: "#666",
-                  marginLeft: "4px",
-                }}
-              >
-                +{items.length - 3}
-              </span>
+              <span style={{ fontSize: "12px", color: "#666", marginLeft: "4px" }}>+{items.length - 3}</span>
             )}
           </div>
         )
@@ -234,10 +279,7 @@ const MyOrders = () => {
       width: 200,
       cellRenderer: (params) => {
         const items = params.value
-        if (!items || !Array.isArray(items)) {
-          return "0 items"
-        }
-
+        if (!items || !Array.isArray(items)) return "0 items"
         return (
           <div style={{ padding: "8px 0" }}>
             {items.map((item, index) => (
@@ -272,7 +314,6 @@ const MyOrders = () => {
       cellRenderer: (params) => {
         const status = params.value || params.data.orderStatus
         let badgeClass = "badge "
-
         switch (status) {
           case "delivered":
             badgeClass += "bg-success"
@@ -289,29 +330,17 @@ const MyOrders = () => {
           default:
             badgeClass += "bg-secondary"
         }
-
         return <span className={badgeClass}>{status}</span>
       },
     },
-    {
-      headerName: "Payment Method",
-      field: "paymentMethod",
-      sortable: true,
-      filter: true,
-      width: 150,
-    },
+    { headerName: "Payment Method", field: "paymentMethod", sortable: true, filter: true, width: 150 },
     {
       headerName: "Date",
       field: "createdAt",
       sortable: true,
       filter: true,
       width: 120,
-      valueFormatter: (params) => {
-        if (params.value) {
-          return new Date(params.value).toLocaleDateString()
-        }
-        return ""
-      },
+      valueFormatter: (params) => (params.value ? new Date(params.value).toLocaleDateString() : ""),
     },
     {
       headerName: "Tracking",
@@ -347,9 +376,9 @@ const MyOrders = () => {
       },
     },
     {
-      headerName: "Replacement Status",
+      headerName: "Replace",
       field: "_id",
-      width: 200,
+      width: 180,
       cellRenderer: (params) => {
         const { _id, createdAt } = params.data
         const key = String(_id)
@@ -357,7 +386,7 @@ const MyOrders = () => {
         const rawStatus = replacementStatuses[key]
         const display = getDisplayStatus(rawStatus)
 
-        if (!isReturnEligible(createdAt)) {
+        if (!isReplaceEligible(createdAt)) {
           return <span className="text-muted">Not Eligible</span>
         }
 
@@ -388,13 +417,51 @@ const MyOrders = () => {
         )
       },
     },
+    {
+      headerName: "Cancel",
+      field: "_id",
+      width: 180,
+      cellRenderer: (params) => {
+        const order = params.data
+        const { _id } = order
+        const key = String(_id)
+        const eligible = isCancelEligible(order)
+        const requested = myCancellationOrderIds.has(key)
+        const status = order.orderStatus || order.status
+
+        if (status === "cancelled") {
+          return <span className="text-danger fw-bold">Cancelled</span>
+        }
+
+        const rawStatus = cancellationStatuses[key]
+        const display = getDisplayStatus(rawStatus)
+
+        return (
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 6 }}>
+            <button
+              className="btn btn-outline-danger btn-sm"
+              disabled={!eligible || requested}
+              onClick={() => openCancelModal(_id)}
+            >
+              {eligible ? (requested ? "Requested" : "Cancel") : "Not Eligible"}
+            </button>
+            {requested && (
+              <small
+                style={{
+                  fontSize: 12,
+                  color: display === "approved" ? "#28a745" : display === "rejected" ? "#dc3545" : "#fd7e14",
+                }}
+              >
+                ({display})
+              </small>
+            )}
+          </div>
+        )
+      },
+    },
   ]
 
-  const defaultColDef = {
-    flex: 1,
-    minWidth: 100,
-    resizable: true,
-  }
+  const defaultColDef = { flex: 1, minWidth: 100, resizable: true }
 
   const getAllOrders = async () => {
     try {
@@ -404,15 +471,9 @@ const MyOrders = () => {
         toast.error("Please login to view your orders")
         return
       }
-
       const response = await axios.get(`${BASEURL}/api/orders/myorders`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-        params: {
-          page,
-          limit,
-        },
+        headers: { Authorization: `Bearer ${token}` },
+        params: { page, limit },
       })
 
       if (response.data) {
@@ -442,17 +503,9 @@ const MyOrders = () => {
     }
   }
 
-  const handlePageChange = (event, value) => {
-    setPage(value)
-  }
-
-  const handleDownloadReceipt = (orderId) => {
-    window.open(`${BASEURL}/api/orders/receipt/${orderId}`, "_blank")
-  }
-
-  const handleTrackOrder = (trackingNumber) => {
-    window.open(`https://shiprocket.in/tracking/${trackingNumber}`, "_blank")
-  }
+  const handlePageChange = (event, value) => setPage(value)
+  const handleDownloadReceipt = (orderId) => window.open(`${BASEURL}/api/orders/receipt/${orderId}`, "_blank")
+  const handleTrackOrder = (trackingNumber) => window.open(`https://shiprocket.in/tracking/${trackingNumber}`, "_blank")
 
   useEffect(() => {
     if (!authUtils.isAuthenticated()) {
@@ -461,7 +514,7 @@ const MyOrders = () => {
     }
     getAllOrders()
     fetchMyReplacements()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    fetchMyCancellations()
   }, [page, limit])
 
   return (
@@ -478,16 +531,18 @@ const MyOrders = () => {
               </div>
             </div>
           ) : (
-            <div className="ag-theme-quartz" style={{ height: 500, width: "100%" }}>
-              <AgGridReact
-                rowData={allOrders}
-                columnDefs={columnDefs}
-                defaultColDef={defaultColDef}
-                pagination={false}
-                paginationPageSize={limit}
-                rowSelection="multiple"
-                rowHeight={80}
-              />
+            <>
+              <div className="ag-theme-quartz" style={{ height: 500, width: "100%" }}>
+                <AgGridReact
+                  rowData={allOrders}
+                  columnDefs={columnDefs}
+                  defaultColDef={defaultColDef}
+                  pagination={false}
+                  paginationPageSize={limit}
+                  rowSelection="multiple"
+                  rowHeight={80}
+                />
+              </div>
               {totalPages > 1 && (
                 <div className="mt-4 d-flex justify-content-center">
                   <Stack spacing={2}>
@@ -501,11 +556,12 @@ const MyOrders = () => {
                   </Stack>
                 </div>
               )}
-            </div>
+            </>
           )}
         </div>
       </div>
 
+      {/* Replacement Modal */}
       {showReplaceModal && (
         <div className="modal d-block" tabIndex="-1" role="dialog" style={{ background: "rgba(0,0,0,0.5)" }}>
           <div className="modal-dialog" role="document">
@@ -542,10 +598,62 @@ const MyOrders = () => {
               </div>
               <div className="modal-footer">
                 <button type="button" className="btn btn-secondary" onClick={closeReplaceModal}>
-                  Cancel
+                  Close
                 </button>
-                <button type="button" className="btn btn-primary" onClick={submitReplacement}>
+                <button type="button" className="btn btn-primary" onClick={submitReplacement} disabled={!replaceReason}>
                   Submit Replacement
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Cancellation Modal */}
+      {showCancelModal && (
+        <div className="modal d-block" tabIndex="-1" role="dialog" style={{ background: "rgba(0,0,0,0.5)" }}>
+          <div className="modal-dialog" role="document">
+            <div className="modal-content">
+              <div className="modal-header">
+                <h5 className="modal-title">Request Cancellation</h5>
+                <button type="button" className="btn-close" onClick={closeCancelModal} aria-label="Close"></button>
+              </div>
+              <div className="modal-body">
+                <div className="mb-3">
+                  <label className="form-label">Reason</label>
+                  <select
+                    className="form-select"
+                    value={cancelReason}
+                    onChange={(e) => setCancelReason(e.target.value)}
+                  >
+                    <option value="">Select a reason</option>
+                    <option value="Change of mind">Change of mind</option>
+                    <option value="Ordered by mistake">Ordered by mistake</option>
+                    <option value="Found better price elsewhere">Found better price elsewhere</option>
+                    <option value="Payment or address issue">Payment or address issue</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+                <div className="mb-3">
+                  <label className="form-label">Additional note (optional)</label>
+                  <textarea
+                    className="form-control"
+                    rows="3"
+                    placeholder="Add any details that help us process the cancellation"
+                    value={cancelNote}
+                    onChange={(e) => setCancelNote(e.target.value)}
+                  />
+                </div>
+                <div className="alert alert-warning mb-0" role="alert">
+                  Cancellation is only allowed within 2 days of purchase and before shipment.
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-secondary" onClick={closeCancelModal}>
+                  Close
+                </button>
+                <button type="button" className="btn btn-danger" onClick={submitCancellation} disabled={!cancelReason}>
+                  Submit Cancellation
                 </button>
               </div>
             </div>
