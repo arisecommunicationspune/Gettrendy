@@ -29,7 +29,7 @@ const productStorage = new CloudinaryStorage({
     folder: "getTrendy/products",
     allowed_formats: ["jpg", "jpeg", "png", "webp", "gif", "avif"],
     resource_type: "image",
-    transformation: [{ width: 800, height: 800, crop: "limit", quality: "auto" }],
+    // transformation: [{ width: 800, height: 800, crop: "limit", quality: "auto" }],
     public_id: (req, file) => {
       // Generate unique filename
       const timestamp = Date.now()
@@ -46,7 +46,7 @@ const categoryStorage = new CloudinaryStorage({
     folder: "getTrendy/categories",
     allowed_formats: ["jpg", "jpeg", "png", "webp", "gif", "avif"],
     resource_type: "image",
-    transformation: [{ width: 400, height: 400, crop: "limit", quality: "auto" }],
+    // transformation: [{ width: 400, height: 400, crop: "limit", quality: "auto" }],
     public_id: (req, file) => {
       const timestamp = Date.now()
       const originalName = file.originalname.split(".")[0].replace(/[^a-zA-Z0-9]/g, "_")
@@ -62,7 +62,7 @@ const subCategoryStorage = new CloudinaryStorage({
     folder: "getTrendy/subcategories",
     allowed_formats: ["jpg", "jpeg", "png", "webp", "gif", "avif"],
     resource_type: "image",
-    transformation: [{ width: 400, height: 400, crop: "limit", quality: "auto" }],
+    // transformation: [{ width: 400, height: 400, crop: "limit", quality: "auto" }],
     public_id: (req, file) => {
       const timestamp = Date.now()
       const originalName = file.originalname.split(".")[0].replace(/[^a-zA-Z0-9]/g, "_")
