@@ -11,6 +11,8 @@ node_modules/
 >>>>>>> 380c6e1436445be99639ed95f6a1c280e116ea36
 >>>>>>> 497b8114b2e808d0009c62a14fb25efd33f4973b
 /.git/
+build/
+/dist/
 
 
 
