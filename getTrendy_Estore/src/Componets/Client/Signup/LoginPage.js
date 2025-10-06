@@ -80,10 +80,23 @@ const Login = () => {
             // Reset error state
             setErrors({});
 
-            // Show success toast
-            toast.success("Login successful! Redirecting...", {
-              autoClose: 2000,
-            });
+         // Show success toast and store the ID
+const toastId = toast.success("Login successful! Redirecting...", {
+  autoClose: 2000,
+});
+
+// Then later (after timeout), dismiss it safely
+setTimeout(() => {
+  toast.dismiss(toastId); // closes that specific toast
+  const from = location.state?.from?.pathname || "/";
+
+  if (userData.role === "admin") {
+    navigate("/", { replace: true });
+  } else {
+    navigate(from, { replace: true });
+  }
+}, 1000);
+
 
             // Redirect after a small delay to allow message to show
             setTimeout(() => {

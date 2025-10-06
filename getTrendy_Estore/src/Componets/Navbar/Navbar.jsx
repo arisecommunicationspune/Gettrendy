@@ -186,7 +186,7 @@ const Navigation = () => {
                       className="category-item"
                     >
                       <div className="d-flex align-items-center">
-                        <span className="category-name">{renderCategoryName(category)}</span>
+                        <span className="category-name" style={{padding: "10px"}}>{renderCategoryName(category)}</span>
                       </div>
                     </NavDropdown.Item>
                   ))

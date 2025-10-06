@@ -229,7 +229,7 @@ const Navigation = () => {
               {/* Categories Dropdown */}
               <NavDropdown
                 title={
-                  <span className="d-flex align-items-center">
+                  <span className="d-flex align-items-center" style={{ padding: "10px"}}>
                     {" "}
                     {/* 👇 Add SVG Icon */}
                     <img
@@ -250,7 +250,7 @@ const Navigation = () => {
                         navigateToShop(category._id)
                         handleNavClick()
                       }}
-                      className="category-item"
+                      className="category-item" 
                     >
                       <div className="d-flex align-items-center">
                         <span className="category-name">{renderCategoryName(category)}</span>
