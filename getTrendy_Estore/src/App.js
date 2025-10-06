@@ -3,8 +3,6 @@ import LoginPage from "./Componets/Client/Signup/LoginPage";
 import { Routes, Route, useLocation } from "react-router-dom";
   import { useEffect } from "react";
 
-  
-
 import Register from "./Componets/Client/Signup/Register";
 import Home from "./Componets/Client/Home/Home";
 import Contact from "./Componets/Client/Contact/Contact";

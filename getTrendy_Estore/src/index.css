@@ -192,3 +192,6 @@ code {
 
 }
 
+.Toastify__toast-container:empty {
+  display: none;
+}

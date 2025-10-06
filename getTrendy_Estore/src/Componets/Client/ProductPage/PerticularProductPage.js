@@ -149,34 +149,46 @@ import Services from "../Services/Services"
   }
 
   const handleAddToCart = async () => {
-    try {
-      if (!authUtils.isAuthenticated()) {
-        toast.warning("Please login to add items to cart")
-        navigate("/login")
-        window.scroll(0, 0)
-        return
-      }
-
-      setIsAddingToCart(true)
-
-      const result = await cartUtils.addToCart(productData._id, quantity, selectedSize, selectedColor)
-
-      if (result && result.success) {
-        toast.success("Product added to cart successfully!")
-        setTimeout(() => {
-          navigate("/cartPage")
-          window.scroll(0, 0)
-        }, 1000)
-      } else {
-        toast.error(result?.message || "Failed to add product to cart")
-      }
-    } catch (error) {
-      console.error("Error adding to cart:", error)
-      toast.error("Failed to add product to cart")
-    } finally {
-      setIsAddingToCart(false)
+  try {
+    if (!authUtils.isAuthenticated()) {
+      toast.warning("Please login to add items to cart", { autoClose: 2000 })
+      navigate("/login")
+      window.scrollTo(0, 0)
+      return
     }
+
+    setIsAddingToCart(true)
+
+    const result = await cartUtils.addToCart(
+      productData._id,
+      quantity,
+      selectedSize,
+      selectedColor
+    )
+
+    if (result?.success) {
+      // Show success toast
+      const toastId = toast.success("Product added to cart successfully!", {
+        autoClose: 2000,
+      })
+
+      // Optional manual dismiss before navigating
+      setTimeout(() => {
+        toast.dismiss(toastId)
+        navigate("/cartPage")
+        window.scrollTo(0, 0)
+      }, 1000)
+    } else {
+      toast.error(result?.message || "Failed to add product to cart")
+    }
+  } catch (error) {
+    console.error("Error adding to cart:", error)
+    toast.error("Failed to add product to cart")
+  } finally {
+    setIsAddingToCart(false)
   }
+}
+
 
   useEffect(() => {
     if (productID) {
@@ -220,7 +232,7 @@ import Services from "../Services/Services"
       </div>
       </div>
 
-      <div className="container my-1" style={{ padding: "100px 0px 50px 0px" }}>
+      <div className="container my-1" style={{ padding: "90px 0px 50px 0px" }}>
         <div className="row " style={{ marginLeft: "5px", marginRight: "5px" }}>
           {/* ✅ Thumbnail column */}
           <div className="col-md-1 col-sm-3 d-flex flex-column gap-4">
@@ -258,7 +270,7 @@ import Services from "../Services/Services"
             </div>
           </div>
 
-          <div className="col-lg-6 col-md-6 col-sm-12 sm-top">
+          <div className="col-lg-6 col-md-6 col-sm-12">
             <div className="product-details">
               <p className="product-category">{renderCategory()}</p>
               <h3 className="product-title ">{productData.product_name || productData.name}</h3>
@@ -509,17 +521,6 @@ import Services from "../Services/Services"
        <Services />
       <Footer />
       <ToastContainer
-        position="top-center"
-        autoClose={3000}
-        hideProgressBar={false}
-        newestOnTop={false}
-        closeOnClick
-        rtl={false}
-        pauseOnFocusLoss
-        draggable
-        pauseOnHover
-        theme="light"
-        containerId="product-page-toast"
       />
     </>
   )

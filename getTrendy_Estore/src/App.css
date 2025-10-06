@@ -127,3 +127,7 @@
   top: 10%;
   position: relative;
 }
+
+.Toastify__toast-container:empty {
+  display: none;
+}
