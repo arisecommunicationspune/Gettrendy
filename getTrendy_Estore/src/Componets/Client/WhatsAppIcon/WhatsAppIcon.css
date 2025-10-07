@@ -23,3 +23,20 @@
     width: 50px;
     border-radius: 50px;
 }
+
+@media (max-width:480px ) {
+.whatsapp-icon {
+    position: fixed;
+    bottom: 100px;
+    right: 20px;
+    background-color: white;
+    border-radius: 50%;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
+    cursor: pointer;
+    display: flex
+;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+}
+}
