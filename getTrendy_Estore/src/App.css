@@ -131,3 +131,11 @@
 .Toastify__toast-container:empty {
   display: none;
 }
+
+.bg-grey {
+  background-color: #f8f9fa !important;
+}
+
+.pl-2 {
+  padding-left: 2rem !important;
+}

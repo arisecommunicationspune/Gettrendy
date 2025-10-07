@@ -116,21 +116,24 @@ const CartPage = () => {
       );
 
       if (result.success) {
-        toast.success(result.message || "Item removed from cart");
+        toast.success(result.message || "Item removed from cart", { autoClose: 1000 });
         // Dispatch cart change event to update navbar
         window.dispatchEvent(new CustomEvent("cart-changed"));
         // Refresh cart items
         await fetchCartItems();
       } else {
-        toast.error(result.message || "Failed to remove item from cart");
+        toast.error(result.message || "Failed to remove item from cart", { autoClose: 1000 });
       }
     } catch (error) {
       console.error("Error removing item:", error);
-      toast.error("Failed to remove item from cart");
+      toast.error("Failed to remove item from cart", { autoClose: 1000 });
     } finally {
       setLoading(false);
     }
   };
+
+  
+
 
   const handleUpdateQuantity = async (item, newQuantity) => {
     if (newQuantity < 1) return;
@@ -154,21 +157,23 @@ const CartPage = () => {
       );
 
       if (result.success) {
-        toast.success("Quantity updated successfully");
+        toast.success("Quantity updated successfully", { autoClose: 1000 });
         // Dispatch cart change event to update navbar
         window.dispatchEvent(new CustomEvent("cart-changed"));
         // Refresh cart items
         await fetchCartItems();
       } else {
-        toast.error(result.message || "Failed to update quantity");
+        toast.error(result.message || "Failed to update quantity", { autoClose: 1000 });
       }
     } catch (error) {
       console.error("Error updating quantity:", error);
-      toast.error("Failed to update quantity");
+      toast.error("Failed to update quantity", { autoClose: 1000 });
     } finally {
       setLoading(false);
     }
   };
+
+  
 
   const handleClearCart = async () => {
     if (window.confirm("Are you sure you want to clear your cart?")) {
@@ -179,18 +184,21 @@ const CartPage = () => {
           setCartItems([]);
           // Dispatch cart change event to update navbar
           window.dispatchEvent(new CustomEvent("cart-changed"));
-          toast.success(result.message || "Cart cleared successfully!");
+          toast.success(result.message || "Cart cleared successfully!", {
+            autoClose: 1000,
+          });
         } else {
-          toast.error(result.message || "Failed to clear cart");
+          toast.error(result.message || "Failed to clear cart", { autoClose: 1000});
         }
       } catch (error) {
         console.error("Error clearing cart:", error);
-        toast.error("Failed to clear cart");
+        toast.error("Failed to clear cart", { autoClose: 1000 });
       } finally {
         setLoading(false);
       }
     }
   };
+
 
   if (!authUtils.isAuthenticated()) {
     return (
@@ -210,7 +218,8 @@ const CartPage = () => {
   return (
     <>
       <ToastContainer />
-      <Container className="cart-page" style={{ padding: "50px" }}>
+      <div className="Container-fluid bg-grey">
+      <Container className="cart-page p-sm">
         <h2>Shopping Cart</h2>
         <p>Home • Cart</p>
 
@@ -244,7 +253,8 @@ const CartPage = () => {
           </div>
         ) : (
           <Row>
-            <Col md={8}>
+            {/* desktop cart start  */}
+            <Col className="desktop-cart" md={8}>
               <div
                 style={{ maxHeight: "500px", overflowY: "auto", width: "100%" }}
               >
@@ -295,7 +305,7 @@ const CartPage = () => {
                                     "/placeholder.svg"
                                   }
                                   alt={productName}
-                                  className="cart-product-image me-3"
+                                  className="cart-product-image "
                                   style={{
                                     width: "80px",
                                     height: "80px",
@@ -308,7 +318,7 @@ const CartPage = () => {
                                   }}
                                 />
                               </Col>
-                              <Col md={8}>
+                              <Col className="pl-2" md={8}>
                                 <h6 className="mb-1">{productName}</h6>
                                 {item?.size && (
                                   <small className="text-muted d-block">
@@ -380,7 +390,7 @@ const CartPage = () => {
               {cartItems.length > 0 && (
                 <Button
                   variant="outline-danger"
-                  className="mt-3"
+                  className="mt-2 mb-4"
                   onClick={handleClearCart}
                   disabled={loading}
                 >
@@ -388,8 +398,143 @@ const CartPage = () => {
                 </Button>
               )}
             </Col>
+             {/* desktop cart end */}
 
-            <Col md={4}>
+            {/* mobile cart start  */}
+            {/* <Col lg={8}> */}
+            <Col className="mobile-cart" sm={12}>
+              <div
+                style={{ maxHeight: "500px", overflowX: "auto", width: "100%" }}
+              >
+                <div className="cart-card">
+                  
+                  <div>
+                    {cartItems.map((item, index) => {
+                      const productId =
+                        item?.productId?._id || item?.productId || item?._id;
+                      const productName =
+                        item?.productId?.product_name ||
+                        item?.productId?.name ||
+                        item?.product_name ||
+                        item?.name ||
+                        "Unknown Product";
+                      const productPrice =
+                        item?.productId?.discount_price &&
+                        item?.productId?.discount_price < item?.productId?.price
+                          ? item?.productId?.discount_price
+                          : item?.productId?.price ||
+                            item?.product_price ||
+                            item?.price ||
+                            0;
+                      const productImage =
+                        item?.productId?.images?.[0] ||
+                        item?.productId?.image ||
+                        item?.product_image ||
+                        item?.image;
+
+                      return (
+                        <div
+                          key={`${productId}-${item?.size}-${item?.color}-${index}`}
+                        >
+                        
+                            <div className="row">
+                              <div className="col-sm-5" style={{width:"41%"}}>
+                                <img
+                                  src={
+                                    getImageUrl(productImage) ||
+                                    "/placeholder.svg"
+                                  }
+                                  alt={productName}
+                                  className="cart-product-image "
+                                  style={{
+                                    width: "120px",
+                                    height: "144px",
+                                    objectFit: "cover",
+                                    borderRadius: "4px",
+                                  }}
+                                  onError={(e) => {
+                                    e.target.onerror = null;
+                                    e.target.src = "/Images/placeholder.jpg";
+                                  }}
+                                />
+                                
+                              </div>
+                              <div className="col-sm-7 pl-2" style={{width:"59%"}}>
+                                <h6 className="mb-1 txt-wrap">{productName}</h6>
+                                {item?.size && (
+                                  <small className="text-muted d-block">
+                                    item: {item?.size},  {item?.color}
+                                  </small>
+                                )}
+                                {/* {item?.color && (
+                                  <small className="text-muted d-block">
+                                     {item?.color}
+                                  </small>
+                                )} */}
+                                <div>₹{productPrice.toFixed(2)}</div>
+                                 <div className="quantity-selector d-flex align-items-center">
+                              <Button style={{marginLeft:"0px"}}
+                                variant="outline-secondary"
+                                size="sm"
+                                onClick={() =>
+                                  handleUpdateQuantity(
+                                    item,
+                                    (item?.quantity || 1) - 1
+                                  )
+                                }
+                                disabled={(item?.quantity || 1) <= 1 || loading}
+                              >
+                                -
+                              </Button>
+                              <span className="mx-2 fw-bold">
+                                {item?.quantity || 1}
+                              </span>
+                              <Button style={{marginLeft:"0px"}}
+                                variant="outline-secondary"
+                                size="sm"
+                                onClick={() =>
+                                  handleUpdateQuantity(
+                                    item,
+                                    (item?.quantity || 1) + 1
+                                  )
+                                }
+                                disabled={loading}
+                              >
+                                +
+                              </Button>
+                            </div>
+                            <Button className="mt-2"
+                              variant="danger"
+                              onClick={() => handleRemoveFromCart(item)}
+                              disabled={loading}
+                            >
+                              Remove
+                            </Button>
+                              </div>
+                            </div>
+                          <hr ></hr>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              {cartItems.length > 0 && (
+                <Button
+                  variant="outline-danger"
+                  className="mt-2 mb-4"
+                  onClick={handleClearCart}
+                  disabled={loading}
+                >
+                  Clear Cart
+                </Button>
+              )}
+            </Col>
+            {/* </Col> */}
+            {/* mobile cart end  */}
+
+            <Col lg={4} md={12}>
               <div className="subtotal-section p-3 shadow-sm border rounded">
                 <h5>Order Summary</h5>
                 <hr />
@@ -420,6 +565,7 @@ const CartPage = () => {
           </Row>
         )}
       </Container>
+      </div>
       <Footer />
     </>
   );

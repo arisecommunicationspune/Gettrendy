@@ -217,7 +217,7 @@ const ProfilePage = () => {
   return (
     <>
       <ToastContainer />
-      <div className="profile-container" style={{ paddingTop: "150px" }}>
+      <div className="profile-container" style={{ paddingTop: "50px" }}>
         {loading && (
           <div className="loading-overlay">
             <div className="spinner-border text-primary" role="status">
@@ -226,9 +226,9 @@ const ProfilePage = () => {
           </div>
         )}
         <div className="row">
-          <div className="col-md-12">
+          {/* <div className="col-md-12">
             <h2 className="profile-title">My Profile</h2>
-          </div>
+          </div> */}
           <div className="profile-details">
             <div className="">
               <h3 className="mb-3">Edit Profile</h3>

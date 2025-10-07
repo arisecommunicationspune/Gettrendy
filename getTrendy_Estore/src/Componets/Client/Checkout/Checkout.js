@@ -533,7 +533,8 @@ const Checkout = () => {
   return (
     <>
       <ToastContainer />
-      <div className="container checkout-page" style={{ paddingTop: "150px" }}>
+      <div className="container-fluid bg-grey">
+      <div className="container checkout-page" >
         <h2>Checkout</h2>
         <p>Home &bull; Checkout</p>
 
@@ -558,12 +559,12 @@ const Checkout = () => {
           </div>
         ) : (
           <div className="row">
-            <div className="col-md-8">
+            <div className="col-lg-8 col-md-12 col-sm-12 mb-4">
               <div className="billing-details">
                 <h3>Billing Details</h3>
-                <form onSubmit={handleSubmit}>
+                <form onSubmit={handleSubmit} className="address-form">
                   {/* Full Name */}
-                  <div className="form-group">
+                  <div className="col-lg-6 col-md-6 col-sm-12 form-group">
                     <label>
                       Full Name <span className="require">*</span>
                     </label>
@@ -583,8 +584,64 @@ const Checkout = () => {
                     )}
                   </div>
 
+                    {/* Phone */}
+                  <div className="col-lg-6 col-md-6 col-sm-12 form-group">
+                    <label>
+                      Phone <span className="require">*</span>
+                    </label>
+                    <input
+                      type="tel"
+                      className={`form-control ${
+                        errors.phone ? "is-invalid" : ""
+                      }`}
+                      placeholder="Phone"
+                      name="phone"
+                      value={formData.phone}
+                      onChange={handleChange}
+                      required
+                    />
+                    {errors.phone && (
+                      <div className="invalid-feedback">{errors.phone}</div>
+                    )}
+                  </div>
+
+                    {/* Email */}
+                  <div className="col-lg-6 col-md-12 col-sm-12 form-group">
+                    <label>
+                      Email <span className="require">*</span>
+                    </label>
+                    <input
+                      type="email"
+                      className={`form-control ${
+                        errors.email ? "is-invalid" : ""
+                      }`}
+                      placeholder="Email"
+                      name="email"
+                      value={formData.email}
+                      onChange={handleChange}
+                      required
+                    />
+                    {errors.email && (
+                      <div className="invalid-feedback">{errors.email}</div>
+                    )}
+                  </div>
+
+                  {/* Apartment */}
+                  <div className="col-lg-6 col-md-12 col-sm-12 form-group">
+                    <label>Apartment, suite  <span className="require">*</span> </label>
+                    <input
+                      type="text"
+                      className="form-control"
+                      placeholder="Apartment, suite, unit"
+                      name="apartment"
+                      value={formData.apartment}
+                      onChange={handleChange}
+                    />
+                  </div>
+
+
                   {/* Street Address */}
-                  <div className="form-group">
+                  <div className="col-lg-6 col-md-12 col-sm-12 form-group">
                     <label>
                       Street Address <span className="require">*</span>
                     </label>
@@ -604,21 +661,10 @@ const Checkout = () => {
                     )}
                   </div>
 
-                  {/* Apartment */}
-                  <div className="form-group">
-                    <label>Apartment, suite, unit (optional)</label>
-                    <input
-                      type="text"
-                      className="form-control"
-                      placeholder="Apartment, suite, unit"
-                      name="apartment"
-                      value={formData.apartment}
-                      onChange={handleChange}
-                    />
-                  </div>
+                  
 
                   {/* City */}
-                  <div className="form-group">
+                  <div className="col-lg-6 col-md-6 col-sm-12 form-group">
                     <label>
                       Town / City <span className="require">*</span>
                     </label>
@@ -639,7 +685,7 @@ const Checkout = () => {
                   </div>
 
                   {/* State */}
-                  <div className="form-group">
+                  <div className="col-lg-4 col-md-6 col-sm-12 form-group">
                     <label>State (optional)</label>
                     <input
                       type="text"
@@ -652,7 +698,7 @@ const Checkout = () => {
                   </div>
 
                   {/* Postcode */}
-                  <div className="form-group">
+                  <div className="col-lg-4 col-md-6 col-sm-12 form-group">
                     <label>
                       Postcode / ZIP <span className="require">*</span>
                     </label>
@@ -672,53 +718,12 @@ const Checkout = () => {
                     )}
                   </div>
 
-                  {/* Phone */}
-                  <div className="form-group">
-                    <label>
-                      Phone <span className="require">*</span>
-                    </label>
-                    <input
-                      type="tel"
-                      className={`form-control ${
-                        errors.phone ? "is-invalid" : ""
-                      }`}
-                      placeholder="Phone"
-                      name="phone"
-                      value={formData.phone}
-                      onChange={handleChange}
-                      required
-                    />
-                    {errors.phone && (
-                      <div className="invalid-feedback">{errors.phone}</div>
-                    )}
-                  </div>
-
-                  {/* Email */}
-                  <div className="form-group">
-                    <label>
-                      Email <span className="require">*</span>
-                    </label>
-                    <input
-                      type="email"
-                      className={`form-control ${
-                        errors.email ? "is-invalid" : ""
-                      }`}
-                      placeholder="Email"
-                      name="email"
-                      value={formData.email}
-                      onChange={handleChange}
-                      required
-                    />
-                    {errors.email && (
-                      <div className="invalid-feedback">{errors.email}</div>
-                    )}
-                  </div>
-
+              
                   {/* Country */}
-                  <div className="form-group">
+                  <div className="col-lg-4 col-md-6 col-sm-12 form-group">
                     <label>Country</label>
                     <select
-                      className="form-control"
+                      className="form-control p-x"
                       name="country"
                       value={formData.country}
                       onChange={handleChange}
@@ -732,7 +737,7 @@ const Checkout = () => {
                   </div>
 
                   {/* Order Notes */}
-                  <div className="form-group">
+                  <div className="col-lg-12 col-md-12 col-sm-12 form-group">
                     <label>Order notes (optional)</label>
                     <textarea
                       className="form-control"
@@ -743,11 +748,17 @@ const Checkout = () => {
                       rows="3"
                     />
                   </div>
+
+                  {/* Order Notes */}
+                  <div className="col-lg-12 form-group">
+                    <img src="/images/ship.png" alt="Payment Methods" ></img>
+                  </div>
+
                 </form>
               </div>
             </div>
 
-            <div className="col-md-4">
+            <div className="col-lg-4 col-md-12 col-sm-12">
               <div className="order-summary">
                 <h3>Your Order</h3>
                 <div className="table-container">
@@ -887,6 +898,7 @@ const Checkout = () => {
             </div>
           </div>
         )}
+      </div>
       </div>
       <Footer />
     </>
