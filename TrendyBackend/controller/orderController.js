@@ -54,6 +54,10 @@ const placeOrder = async (req, res) => {
       }
     }
 
+    // Normalize payment method
+const paymentMethodNormalized =
+  paymentMethod === "RAZORPAY" ? "RAZORPAY" : paymentMethod || "CASH"
+
     const orderId = `ORD${Date.now()}${Math.floor(Math.random() * 1000)}`
 
     const order = new Order({
@@ -70,8 +74,8 @@ const placeOrder = async (req, res) => {
         color: i.color || "Default",
       })),
       totalAmount,
-      paymentMethod: paymentMethod || "CASH",
-      paymentStatus: paymentMethod === "CASH" ? "paid" : "pending",
+     paymentMethod: paymentMethodNormalized,
+     paymentStatus: paymentMethodNormalized === "CASH" ? "paid" : "pending",
       status: "pending",
       orderStatus: "pending",
       address: {
