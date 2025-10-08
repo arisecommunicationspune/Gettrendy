@@ -198,16 +198,17 @@ const Checkout = () => {
         totalAmount: total,
         address: {
           fullName: formData.fullName,
-          street: formData.address,
+          phone: formData.phone,
+          email: formData.email,
           apartment: formData.apartment,
+          street: formData.address,
           city: formData.city,
           state: formData.state,
           postcode: formData.postcode,
-          phone: formData.phone,
-          email: formData.email,
           country: formData.country,
         },
         notes: formData.orderNotes,
+        paymentMethod: "ONLINE",
       };
       console.log("[Checkout] Prepared orderData for backend:", orderData);
 
