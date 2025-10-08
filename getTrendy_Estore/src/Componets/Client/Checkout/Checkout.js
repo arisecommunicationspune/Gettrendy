@@ -208,7 +208,7 @@ const Checkout = () => {
           country: formData.country,
         },
         notes: formData.orderNotes,
-        paymentMethod: "ONLINE",
+        paymentMethod: "RAZORPAY",
       };
       console.log("[Checkout] Prepared orderData for backend:", orderData);
 
