@@ -53,6 +53,10 @@ const [selectedSubCategory, setSelectedSubCategory] = useState(null);
     window.scroll(0, 0)
   }
 
+     // 👇 Get subcategory ID from navigation
+  const subcategoryId = location.state?.subcategory;
+
+
 
   const fetchProducts = async () => {
     try {
@@ -67,9 +71,8 @@ const [selectedSubCategory, setSelectedSubCategory] = useState(null);
         params.append("category", selectedCategory);
       }
 
-      if (selectedSubCategory) {
-  params.append("subcategory", selectedSubCategory);
-}
+       const subcategoryId = location.state?.subcategory || selectedSubCategory;
+    if (subcategoryId) params.append("subcategory", subcategoryId);
 
 
       if (searchQuery.trim()) {
@@ -156,7 +159,6 @@ const [selectedSubCategory, setSelectedSubCategory] = useState(null);
     }
   };
 
-
   
 
   // Fetch data when filters change
@@ -180,6 +182,7 @@ const [selectedSubCategory, setSelectedSubCategory] = useState(null);
     priceRange,
     sortBy,
     sortOrder,
+    location.state?.subcategory
   ]);
 
   // Check cart status for products

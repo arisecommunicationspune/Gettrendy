@@ -29,10 +29,13 @@ const Categories = () => {
     }
   }
 
+  // Navigate to shop with selected subcategory 
   const navigateToSubcategory = (subcategoryId) => {
-    navigate("/shop", { state: { subcategoryId } })
+    navigate("/shop", { state: { subcategory: subcategoryId } })
     window.scrollTo(0, 0)
   }
+   
+ 
 
   useEffect(() => {
     fetchCategories()
