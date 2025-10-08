@@ -18,8 +18,10 @@ import {
   cartUtils,
   getImageUrl,
 } from "../../Client/Comman/CommanConstans";
-import { toast, ToastContainer } from "react-toastify";
+// at top of CartPage.jsx
+import { toast, ToastContainer,  } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
+
 
 const CartPage = () => {
   const navigate = useNavigate();
@@ -27,6 +29,9 @@ const CartPage = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
+ 
+
+ 
   // Fetch cart items from server
   const fetchCartItems = async () => {
     if (!authUtils.isAuthenticated()) {
@@ -116,11 +121,17 @@ const CartPage = () => {
       );
 
       if (result.success) {
-        toast.success(result.message || "Item removed from cart", { autoClose: 1000 });
+        const toastID = toast.success(result.message || "Item removed from cart", { autoClose: 1000 });
         // Dispatch cart change event to update navbar
         window.dispatchEvent(new CustomEvent("cart-changed"));
         // Refresh cart items
         await fetchCartItems();
+         // Optional manual dismiss before navigating
+      setTimeout(() => {
+        toast.dismiss(toastID)
+        navigate("/cartPage")
+        window.scrollTo(0, 0)
+      }, 1000)
       } else {
         toast.error(result.message || "Failed to remove item from cart", { autoClose: 1000 });
       }
@@ -137,6 +148,7 @@ const CartPage = () => {
 
   const handleUpdateQuantity = async (item, newQuantity) => {
     if (newQuantity < 1) return;
+
 
     setLoading(true);
     try {
@@ -156,23 +168,30 @@ const CartPage = () => {
         item?.color
       );
 
-      if (result.success) {
-        toast.success("Quantity updated successfully", { autoClose: 1000 });
-        // Dispatch cart change event to update navbar
-        window.dispatchEvent(new CustomEvent("cart-changed"));
-        // Refresh cart items
-        await fetchCartItems();
-      } else {
-        toast.error(result.message || "Failed to update quantity", { autoClose: 1000 });
-      }
-    } catch (error) {
-      console.error("Error updating quantity:", error);
-      toast.error("Failed to update quantity", { autoClose: 1000 });
-    } finally {
-      setLoading(false);
-    }
-  };
+    if (result.success) {
+      const toastId = toast.success("Quantity updated successfully!", {
+        autoClose: 1200,
+      });
 
+      window.dispatchEvent(new CustomEvent("cart-changed"));
+      await fetchCartItems();
+
+      // Optional manual dismiss before navigating
+      setTimeout(() => {
+        toast.dismiss(toastId)
+        navigate("/cartPage")
+        window.scrollTo(0, 0)
+      }, 1000)
+    } else {
+      toast.error(result.message || "Failed to update quantity", { autoClose: 1200 });
+    }
+  } catch (error) {
+    console.error("Error updating quantity:", error);
+    toast.error("Failed to update quantity", { autoClose: 1200 });
+  } finally {
+    setLoading(false);
+  }
+};
   
 
   const handleClearCart = async () => {
@@ -181,12 +200,18 @@ const CartPage = () => {
       try {
         const result = await cartUtils.clearCart();
         if (result.success) {
-          setCartItems([]);
+         const toastId = setCartItems([]);
           // Dispatch cart change event to update navbar
           window.dispatchEvent(new CustomEvent("cart-changed"));
           toast.success(result.message || "Cart cleared successfully!", {
             autoClose: 1000,
           });
+           // Optional manual dismiss before navigating
+      setTimeout(() => {
+        toast.dismiss(toastId)
+        navigate("/cartPage")
+        window.scrollTo(0, 0)
+      }, 1000)
         } else {
           toast.error(result.message || "Failed to clear cart", { autoClose: 1000});
         }

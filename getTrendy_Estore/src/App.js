@@ -36,8 +36,10 @@ import StoreRegister from "./Componets/Admin/Store/StoreRegister";
 import StoreLogin from "./Componets/Admin/Store/StoreLogin";
 import Categories from "./Componets/Client/Categories/Categories";
 import Orders from "./Componets/Admin/Orders/Orders";
-import { ToastContainer } from "react-toastify";
+// at top of CartPage.jsx
+import { ToastContainer, cssTransition } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
+
 import ProfilePage from "./Componets/Client/ProfilePage/ProfilePage";
 import MyOrders from "./Componets/Client/Orders/MyOrders";
 import PrivacyPolicy from "./Componets/Client/PrivacyPolicy/PrivacyPolicy";
@@ -66,6 +68,13 @@ const App = () => {
       location.pathname === "/delivery-home"
     );
   };
+
+  // create a ghost transition (place near your component definition)
+const ghostTransition = cssTransition({
+  enter: "ghost-enter",
+  exit: "ghost-exit",
+  duration: [300, 800], // [enterDuration, exitDuration] in ms
+});
 
 
 
@@ -314,6 +323,7 @@ console.log("VERSION:", process.env.REACT_APP_VERSION);
         draggable
         pauseOnHover
         theme="light"
+        transition={ghostTransition}
       />
 
     </>

@@ -195,3 +195,20 @@ code {
 .Toastify__toast-container:empty {
   display: none;
 }
+
+/* Ghost fade-out animation */
+@keyframes ghostFadeOut {
+  0% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+}
+
+/* Apply to toast when it's closing */
+.Toastify__toast--closing {
+  animation: ghostFadeOut 0.8s ease forwards;
+}
