@@ -75,7 +75,7 @@ async function createOrder(orderData) {
     const shiprocketOrderData = {
       order_id: String(orderData.order_id), // Ensure it's a string
       order_date: orderData.order_date || new Date().toISOString().slice(0, 19).replace("T", " "),
-      pickup_location: orderData.pickup_location || "warehouse",
+      pickup_location: orderData.pickup_location || "Warehouse",
       channel_id: "", // Leave empty for manual orders
       comment: orderData.comment || "Order from website",
       billing_customer_name: String(orderData.billing_customer_name).trim(),

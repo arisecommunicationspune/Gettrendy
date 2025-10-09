@@ -14,7 +14,7 @@ const TWO_DAYS_MS = 2 * 24 * 60 * 60 * 1000
 
 function isOrderCancelEligible(order) {
   const currentStatus = order.orderStatus || order.status
-  if (["shipped", "delivered", "cancelled"].includes(currentStatus)) {
+  if (["shipped", "delivered", "cancelled",  "returned", "completed"].includes(currentStatus)) {
     return { ok: false, reason: currentStatus }
   }
   const created = new Date(order.createdAt).getTime()
@@ -112,7 +112,7 @@ const paymentMethodNormalized =
         const shiprocketPayload = {
           order_id: order.orderId,
           order_date: new Date().toISOString(),
-          pickup_location: "warehouse",
+          pickup_location: "Warehouse",
           billing_customer_name: String(order.address.fullName),
           billing_last_name: "",
           billing_address: String(order.address.street),
