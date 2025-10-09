@@ -4,6 +4,7 @@ import { AgGridReact } from "ag-grid-react"
 import "ag-grid-community/styles/ag-grid.css"
 import "ag-grid-community/styles/ag-theme-quartz.css"
 import axios from "axios"
+import "./MyOrders.css";
 import { BASEURL, authUtils, getImageUrl } from "../Comman/CommanConstans"
 import Footer from "../Footer/Footer"
 import { Pagination, Stack } from "@mui/material"
@@ -17,7 +18,7 @@ const MyOrders = () => {
   const [totalRows, setTotalRows] = useState(0)
   const [loading, setLoading] = useState(false)
   const [totalPages, setTotalPages] = useState(1)
-  const [limit, setLimit] = useState(10)
+  const [limit, setLimit] = useState(12)
   const [page, setPage] = useState(1)
 
   const [showReplaceModal, setShowReplaceModal] = useState(false)
@@ -48,13 +49,24 @@ const MyOrders = () => {
     return Date.now() - orderDate <= FIVE_DAYS_MS
   }
 
-  const isCancelEligible = (order) => {
-    const created = new Date(order.createdAt).getTime()
-    const now = Date.now()
-    const status = order.orderStatus || order.status
-    if (["shipped", "delivered", "cancelled"].includes(status)) return false
-    return now - created <= TWO_DAYS_MS
-  }
+const isCancelEligible = (order) => {
+  if (!order) return false;
+
+  const status = (order.orderStatus || order.status || "").toLowerCase();
+
+  // Disable cancel if shipped or beyond
+  const nonCancelableStatuses = ["shipped", "delivered", "cancelled", "returned", "completed"];
+
+  // Allow cancel for anything before "shipped"
+  if (nonCancelableStatuses.includes(status)) return false;
+
+  // Optional: if you still want a time limit, keep this check
+  const created = new Date(order.createdAt).getTime();
+  const now = Date.now();
+
+  return now - created <= TWO_DAYS_MS; // or remove this line if you want unlimited until shipped
+};
+
 
   const openReplaceModal = (orderId) => {
     if (myReplacementOrderIds.has(String(orderId))) {
@@ -507,6 +519,9 @@ const MyOrders = () => {
   const handleDownloadReceipt = (orderId) => window.open(`${BASEURL}/api/orders/receipt/${orderId}`, "_blank")
   const handleTrackOrder = (trackingNumber) => window.open(`https://shiprocket.in/tracking/${trackingNumber}`, "_blank")
 
+
+
+
   useEffect(() => {
     if (!authUtils.isAuthenticated()) {
       toast.warning("Please login to view your orders")
@@ -524,42 +539,86 @@ const MyOrders = () => {
           <h3 className="mb-3" style={{ fontWeight: "bold" }}>
             My Orders
           </h3>
-          {loading ? (
-            <div className="text-center py-5">
-              <div className="spinner-border text-primary" role="status">
-                <span className="visually-hidden">Loading...</span>
+        </div>
+          <div className="row">
+   {allOrders.length === 0 ? (
+    <div className="text-center py-5">No orders found.</div>
+  ) : (
+    allOrders.map((order, index) => {
+      const key = String(order._id)
+      const replaceRequested = myReplacementOrderIds.has(key)
+      const replaceStatus = getDisplayStatus(replacementStatuses[key])
+      const cancelRequested = myCancellationOrderIds.has(key)
+      const cancelStatus = getDisplayStatus(cancellationStatuses[key])
+      return (
+        <div className="col-md-6 col-lg-3 mb-4" key={order._id}>
+          <div className="order-card">
+            <div className="order-card-header">
+              <span>Order ID: {order._id.slice(-8)}</span>
+              <span className={`badge status-badge ${order.orderStatus || order.status}`}>{order.orderStatus || order.status}</span>
+            </div>
+            <div className="order-card-body">
+              <div className="order-images">
+                {(order.items || []).slice(0, 3).map((item, idx) => (
+                  <img
+                    key={idx}
+                    src={item.productId?.images?.[0] ? getImageUrl(item.productId.images[0]) : "/placeholder.svg"}
+                    alt={item.productName}
+                    onError={(e) => (e.target.src = "/placeholder.svg")}
+                  />
+                ))}
+                {(order.items?.length > 3) && <span className="extra-count">+{order.items.length - 3}</span>}
+              </div>
+              <div className="order-items">
+                {(order.items || []).map((item, idx) => (
+                  <div className="order-item" key={idx}>
+                    <strong>{item.productName}</strong>
+                    <div>Qty: {item.quantity} | Size: {item.size} | Color: {item.color}</div>
+                    <div className="price">₹{item.price}</div>
+                  </div>
+                ))}
               </div>
             </div>
-          ) : (
-            <>
-              <div className="ag-theme-quartz" style={{ height: 500, width: "100%" }}>
-                <AgGridReact
-                  rowData={allOrders}
-                  columnDefs={columnDefs}
-                  defaultColDef={defaultColDef}
-                  pagination={false}
-                  paginationPageSize={limit}
-                  rowSelection="multiple"
-                  rowHeight={80}
-                />
+            <div className="order-card-footer">
+              <div>Total: ₹{order.totalAmount}</div>
+              <div className="footer-buttons">
+                <button className="btn btn-primary btn-sm"  onClick={() => handleDownloadReceipt(order.orderId || order._id)}
+    disabled={!order._id && !order.orderId} >Invoice</button>
+                <button className="btn btn-info btn-sm"  onClick={() => handleTrackOrder(order.trackingNumber)}
+    disabled={!order.trackingNumber} // disable if no tracking
+  >Track</button>
+                {/* <button
+                  className="btn btn-warning btn-sm"
+                  disabled={!isReplaceEligible(order.createdAt) || replaceRequested}
+                  onClick={() => openReplaceModal(order._id)}
+                >
+                  {replaceRequested ? "Requested" : "Replace"}
+                </button> */}
+               {!isCancelEligible(order) ? (
+  <button className="btn btn-secondary btn-sm" disabled>
+    Not Cancellable
+  </button>
+) : (
+  <button
+    className="btn btn-danger btn-sm"
+    disabled={cancelRequested}
+    onClick={() => openCancelModal(order._id)}
+  >
+    {cancelRequested ? "Requested" : "Cancel"}
+  </button>
+)}
               </div>
-              {totalPages > 1 && (
-                <div className="mt-4 d-flex justify-content-center">
-                  <Stack spacing={2}>
-                    <Pagination
-                      count={totalPages}
-                      page={page}
-                      onChange={handlePageChange}
-                      variant="outlined"
-                      className="custom-pagination"
-                    />
-                  </Stack>
-                </div>
-              )}
-            </>
-          )}
+            </div>
+          </div>
         </div>
-      </div>
+      )
+    })
+  )}
+</div>
+</div>
+{totalPages > 1 && ( <div className="mt-4 d-flex justify-content-center"> <Stack spacing={2}> <Pagination count={totalPages} page={page} onChange={handlePageChange} variant="outlined" className="custom-pagination" /> </Stack> </div> )}
+
+
 
       {/* Replacement Modal */}
       {showReplaceModal && (
@@ -662,8 +721,9 @@ const MyOrders = () => {
       )}
 
       <Footer />
+      
     </>
-  )
+  );
 }
 
-export default MyOrders
+export default MyOrders;

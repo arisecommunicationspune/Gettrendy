@@ -276,13 +276,14 @@ const Checkout = () => {
                 pickup_location: "warehouse",
                 billing_customer_name: String(formData.fullName),
                 billing_last_name: "",
+                 billing_phone: String(formData.phone),
+                  billing_email: String(formData.email),
                 billing_address: String(formData.address),
                 billing_city: String(formData.city),
                 billing_pincode: String(formData.postcode),
                 billing_state: String(formData.state),
                 billing_country: String(formData.country),
-                billing_email: String(formData.email),
-                billing_phone: String(formData.phone),
+               
                 order_items: cartItems.map((item) => ({
                   name: String(
                     item.productId?.product_name ||
@@ -340,6 +341,7 @@ const Checkout = () => {
               error.message ||
                 "Error processing payment. Please contact support."
             );
+            
           } finally {
             setLoading(false);
             console.log(
@@ -824,9 +826,9 @@ const Checkout = () => {
                               checked={shipping === 50}
                               onChange={() => setShipping(50)}
                             />{" "}
-                            Flat rate: ₹50.00
+                             ₹50.00
                           </label>
-                          <br />
+                          {/* <br />
                           <label>
                             <input
                               type="radio"
@@ -836,7 +838,7 @@ const Checkout = () => {
                               onChange={() => setShipping(25)}
                             />{" "}
                             Local pickup: ₹25.00
-                          </label>
+                          </label> */}
                         </div>
                       </td>
                     </tr>
