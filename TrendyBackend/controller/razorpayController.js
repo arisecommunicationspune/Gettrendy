@@ -304,7 +304,7 @@ const verifyRazorpayPayment = async (req, res) => {
       const shiprocketOrderData = {
         order_id: savedOrder.orderId,
         order_date: new Date().toISOString().slice(0, 19).replace("T", " "),
-        pickup_location: "warehouse",
+        pickup_location: "Warehouse",
         billing_customer_name: savedOrder.address.fullName.split(" ")[0] || savedOrder.address.fullName,
         billing_last_name: savedOrder.address.fullName.split(" ").slice(1).join(" ") || "",
         billing_address: savedOrder.address.street,
