@@ -273,7 +273,7 @@ const Checkout = () => {
                   verifyResponse.data.order?.orderId ||
                   `ORDER_${Date.now()}`,
                 order_date: new Date().toISOString().slice(0, 19).replace("T", " "),
-                pickup_location: "warehouse",
+                pickup_location: 9007588,
                 billing_customer_name: String(formData.fullName),
                 billing_last_name: "",
                 billing_address: String(formData.address),
@@ -296,11 +296,13 @@ const Checkout = () => {
                       : item.productId || item.sku
                   ),
                   units: Number(item.quantity),
-                  selling_price: Number(
-                    item.productId?.price ||
-                    item.product_price ||
-                    item.price
-                  ),
+                 selling_price: Number(
+  item.productId?.discount_price &&
+  item.productId.discount_price < item.productId.price
+    ? item.productId.discount_price
+    : item.productId?.price || item.product_price || item.price
+),
+
                   // Do NOT add any extra fields here!
                 })),
                 payment_method: "Prepaid",

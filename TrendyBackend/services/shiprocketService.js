@@ -47,7 +47,7 @@ async function authenticate() {
   }
 }
 
-let defaultPickupLocation = "warehouse"; // fallback
+let defaultPickupLocation = null; // fallback
 
 async function fetchPickupLocation() {
   try {
@@ -57,10 +57,10 @@ async function fetchPickupLocation() {
     });
 
     const pickups = response.data?.data?.shipping_address || [];
-    if (pickups.length > 0) {
-      defaultPickupLocation = pickups[0].pickup_location;
-      console.log("✅ Default Pickup Location set to:", defaultPickupLocation);
-    } else {
+   if (pickups.length > 0) {
+  defaultPickupLocation = pickups[0].id; // Use ID, not string
+  console.log("✅ Default Pickup Location ID set to:", defaultPickupLocation);
+} else {
       console.warn("⚠️ No pickup locations found, using fallback:", defaultPickupLocation);
     }
   } catch (err) {
@@ -100,7 +100,7 @@ async function createOrder(orderData) {
     const shiprocketOrderData = {
       order_id: String(orderData.order_id), // Ensure it's a string
       order_date: orderData.order_date || new Date().toISOString().slice(0, 19).replace("T", " "),
-      pickup_location: orderData.pickup_location || "warehouse",
+     pickup_location: shiprocketService.defaultPickupLocation || 9007588, // fallback ID
       channel_id: "", // Leave empty for manual orders
       comment: orderData.comment || "Order from website",
       billing_customer_name: String(orderData.billing_customer_name).trim(),
