@@ -202,7 +202,7 @@ const verifyPayment = async (req, res) => {
       const shiprocketPayload = {
         order_id: String(order.orderId),
         order_date: new Date().toISOString(),
-        pickup_location: "warehouse",
+        pickup_location: "Warehouse",
         billing_customer_name: String(order.address.fullName),
         billing_last_name: "",
         billing_address: String(order.address.street),
