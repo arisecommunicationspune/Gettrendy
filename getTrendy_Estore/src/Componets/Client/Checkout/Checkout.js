@@ -273,7 +273,7 @@ const Checkout = () => {
                   verifyResponse.data.order?.orderId ||
                   `ORDER_${Date.now()}`,
                 order_date: new Date().toISOString().slice(0, 19).replace("T", " "),
-                pickup_location: 9007588,
+                pickup_location: "warehouse",
                 billing_customer_name: String(formData.fullName),
                 billing_last_name: "",
                 billing_address: String(formData.address),
