@@ -1,16 +1,21 @@
-const { authenticate } = require("./services/shiprocketService");
-
 require("dotenv").config();
-console.log("EMAIL:", process.env.SHIPROCKET_EMAIL);
-console.log("PASSWORD:", process.env.SHIPROCKET_PASSWORD);
+const axios = require("axios");
 
+const authenticate = async () => {
+  console.log("EMAIL:", process.env.SHIPROCKET_EMAIL);
+  console.log("PASSWORD:", process.env.SHIPROCKET_PASSWORD);
+  console.log("Authenticating with Shiprocket...");
 
-(async () => {
-  try {
-    const token = await authenticate();
-    console.log("✅ Shiprocket Auth Successful!");
-    console.log("Token:", token);
-  } catch (error) {
-    console.error("❌ Shiprocket Auth Failed:", error.message);
-  }
-})();
+  const response = await axios.post("https://apiv2.shiprocket.in/v1/external/auth/login", {
+    email: process.env.SHIPROCKET_EMAIL,
+    password: process.env.SHIPROCKET_PASSWORD,
+  });
+
+  console.log("Shiprocket authentication successful");
+  console.log("✅ Shiprocket Auth Successful!");
+  console.log("Token:", response.data.token);
+  return response.data.token;
+};
+
+// 👇 ADD THIS LINE to export it
+module.exports = { authenticate };

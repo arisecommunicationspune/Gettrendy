@@ -296,11 +296,13 @@ const Checkout = () => {
                       : item.productId || item.sku
                   ),
                   units: Number(item.quantity),
-                  selling_price: Number(
-                    item.productId?.price ||
-                    item.product_price ||
-                    item.price
-                  ),
+                 selling_price: Number(
+  item.productId?.discount_price &&
+  item.productId.discount_price < item.productId.price
+    ? item.productId.discount_price
+    : item.productId?.price || item.product_price || item.price
+),
+
                   // Do NOT add any extra fields here!
                 })),
                 payment_method: "Prepaid",

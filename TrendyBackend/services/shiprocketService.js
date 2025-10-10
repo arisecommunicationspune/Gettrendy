@@ -47,6 +47,31 @@ async function authenticate() {
   }
 }
 
+let defaultPickupLocation = null; // fallback
+
+async function fetchPickupLocation() {
+  try {
+    const authToken = await authenticate();
+    const response = await axios.get(`${SHIPROCKET_BASE_URL}/settings/company/pickup`, {
+      headers: { Authorization: `Bearer ${authToken}` },
+    });
+
+    const pickups = response.data?.data?.shipping_address || [];
+   if (pickups.length > 0) {
+  defaultPickupLocation = pickups[0].id; // Use ID, not string
+  console.log("✅ Default Pickup Location ID set to:", defaultPickupLocation);
+} else {
+      console.warn("⚠️ No pickup locations found, using fallback:", defaultPickupLocation);
+    }
+  } catch (err) {
+    console.error("❌ Error fetching pickup location:", err.message);
+  }
+}
+
+// call this once when your app boots (e.g. in index.js)
+fetchPickupLocation();
+
+
 // Create order in Shiprocket
 async function createOrder(orderData) {
   try {
