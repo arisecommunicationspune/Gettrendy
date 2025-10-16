@@ -227,7 +227,7 @@ const AddMainCategory = () => {
                     />
                     <Form.Control.Feedback type="invalid">{errors.category_image}</Form.Control.Feedback>
                     <Form.Text className="text-muted">
-                      Supported formats: JPG, JPEG, PNG, GIF, WebP, AVIF (Max: 5MB)
+                      Supported formats: JPG, JPEG, PNG, GIF, WebP, AVIF, jpeg, jpg, png (Max: 5MB)
                     </Form.Text>
                   </Form.Group>
 

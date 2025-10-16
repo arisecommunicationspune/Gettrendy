@@ -666,7 +666,7 @@ useEffect(() => {
                 <Form.Control.Feedback type="invalid">{errors.images}</Form.Control.Feedback>
                 <Form.Text className="text-muted">
                   You can select multiple images at once. Maximum 5 images allowed. Supported formats: JPG, JPEG, PNG,
-                  GIF, WebP, AVIF (Max: 5MB each)
+                  GIF, WebP, AVIF, jpeg, jpg, png (Max: 5MB each)
                 </Form.Text>
               </Form.Group>
 

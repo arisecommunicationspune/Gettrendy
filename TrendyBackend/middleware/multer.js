@@ -27,7 +27,7 @@ const productStorage = new CloudinaryStorage({
   cloudinary: cloudinary,
   params: {
     folder: "getTrendy/products",
-    allowed_formats: ["jpg", "jpeg", "png", "webp", "gif", "avif"],
+    allowed_formats: ["jpg", "jpeg", "png", "webp", "gif", "avif", "JPEG", "PNG", "JPG"],
     resource_type: "image",
     // transformation: [{ width: 800, height: 800, crop: "limit", quality: "auto" }],
     public_id: (req, file) => {
@@ -44,7 +44,7 @@ const categoryStorage = new CloudinaryStorage({
   cloudinary: cloudinary,
   params: {
     folder: "getTrendy/categories",
-    allowed_formats: ["jpg", "jpeg", "png", "webp", "gif", "avif"],
+    allowed_formats: ["jpg", "jpeg", "png", "webp", "gif", "avif", "JPEG", "PNG", "JPG"],
     resource_type: "image",
     // transformation: [{ width: 400, height: 400, crop: "limit", quality: "auto" }],
     public_id: (req, file) => {
@@ -60,7 +60,7 @@ const subCategoryStorage = new CloudinaryStorage({
   cloudinary: cloudinary,
   params: {
     folder: "getTrendy/subcategories",
-    allowed_formats: ["jpg", "jpeg", "png", "webp", "gif", "avif"],
+    allowed_formats: ["jpg", "jpeg", "png", "webp", "gif", "avif", "JPEG", "PNG", "JPG"],
     resource_type: "image",
     // transformation: [{ width: 400, height: 400, crop: "limit", quality: "auto" }],
     public_id: (req, file) => {
@@ -76,7 +76,7 @@ const generalStorage = new CloudinaryStorage({
   cloudinary: cloudinary,
   params: {
     folder: "getTrendy/general",
-    allowed_formats: ["jpg", "jpeg", "png", "webp", "gif", "avif"],
+    allowed_formats: ["jpg", "jpeg", "png", "webp", "gif", "avif", "JPEG", "PNG", "JPG"],
     resource_type: "image",
     transformation: [{ quality: "auto" }],
     public_id: (req, file) => {
