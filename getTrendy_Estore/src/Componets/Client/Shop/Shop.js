@@ -1,130 +1,104 @@
 "use client";
-
 import { useEffect, useState } from "react";
 import "./Shop.css";
 import { Badge, Button, Card, Col, Row } from "react-bootstrap";
 import Box from "@mui/material/Box";
 import Slider from "@mui/material/Slider";
 import Pagination from "@mui/material/Pagination";
-import { getImageUrl } from "../Comman/CommanConstans"
+import { getImageUrl } from "../Comman/CommanConstans";
 import Stack from "@mui/material/Stack";
 import { FaHeart, FaStar } from "react-icons/fa";
 import { MdKeyboardArrowDown, MdKeyboardArrowUp } from "react-icons/md";
 import Footer from "../Footer/Footer";
 import { BASEURL, authUtils, cartUtils } from "../Comman/CommanConstans";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import Loader from "../Loader/Loader";
 import { toast, ToastContainer } from "react-toastify";
 import axios from "axios";
 
-
 const Shop = () => {
   const navigate = useNavigate();
-  const location = useLocation();
-  const [page, setPage] = useState(1);
-  const [limit, setLimit] = useState(9);
-  const [priceRange, setPriceRange] = useState([0, 10000]);
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Filters/read params
+  const selectedCategory = searchParams.get("category") || null;
+  const selectedSubCategory = searchParams.get("subcategory") || null;
+  const searchQuery = searchParams.get("search") || "";
+  const page = Number(searchParams.get("page") || 1);
+  const limit = Number(searchParams.get("limit") || 9);
+  const priceRange = [
+    Number(searchParams.get("minPrice") || 0),
+    Number(searchParams.get("maxPrice") || 10000),
+  ];
+  const sortBy = searchParams.get("sortBy") || "random";
+  const sortOrder = searchParams.get("sortOrder") || "asc";
+
+  // UI state
   const [pagesCount, setPagesCount] = useState(1);
   const [products, setProducts] = useState([]);
   const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(false);
   const [inCartStatus, setInCartStatus] = useState({});
   const [allCategoryList, setAllCategoryList] = useState([]);
-  const [selectedCategory, setSelectedCategory] = useState(null);
-  const [searchQuery, setSearchQuery] = useState("");
   const [visibleCategoryCount, setVisibleCategoryCount] = useState(6);
-  const [sortBy, setSortBy] = useState("random");
-  const [sortOrder, setSortOrder] = useState("asc");
   const [allSubCategoryList, setAllSubCategoryList] = useState([]);
-const [selectedSubCategory, setSelectedSubCategory] = useState(null);
-  const navigation = useNavigate();
 
-
-
-  // Get category from location state if available
+  // Sync subcategories when category changes
   useEffect(() => {
-    if (location.state && location.state.category) {
-      setSelectedCategory(location.state.category);
+    if (selectedCategory) {
+      axios
+        .get(`${BASEURL}/api/subcategory?parent_category=${selectedCategory}`)
+        .then((res) => {
+          const subcats = res.data.rows || res.data.data || res.data || [];
+          setAllSubCategoryList(subcats);
+        })
+        .catch(() => setAllSubCategoryList([]));
+    } else {
+      setAllSubCategoryList([]);
     }
-  }, [location.state]);
-  
-   const navigateToProduct = (id) => {
-    navigation("/perticularproductpage", { state: { productId: id } })
-    window.scroll(0, 0)
-  }
+  }, [selectedCategory]);
 
-     // 👇 Get subcategory ID from navigation
-  const subcategoryId = location.state?.subcategory;
-
-
-
+  // Fetch products
   const fetchProducts = async () => {
     try {
       setLoading(true);
 
-      // Build query parameters
       const params = new URLSearchParams();
-      params.append("page", page.toString());
-      params.append("limit", limit.toString());
-
-      if (selectedCategory) {
-        params.append("category", selectedCategory);
-      }
-
-       const subcategoryId = location.state?.subcategory || selectedSubCategory;
-    if (subcategoryId) params.append("subcategory", subcategoryId);
-
-
-      if (searchQuery.trim()) {
-        params.append("search", searchQuery.trim());
-      }
-
-      params.append("minPrice", priceRange[0].toString());
-      params.append("maxPrice", priceRange[1].toString());
+      params.append("page", page);
+      params.append("limit", limit);
+      if (selectedCategory) params.append("category", selectedCategory);
+      if (selectedSubCategory)
+        params.append("subcategory", selectedSubCategory);
+      if (searchQuery.trim()) params.append("search", searchQuery.trim());
+      params.append("minPrice", priceRange[0]);
+      params.append("maxPrice", priceRange[1]);
       params.append("sortBy", sortBy);
       params.append("sortOrder", sortOrder);
-
-      console.log("Fetching products with params:", params.toString());
 
       const response = await axios.get(
         `${BASEURL}/api/products?${params.toString()}`
       );
 
-      console.log("Products response:", response.data);
-
-      if (response.data) {
-        // Handle different response formats
-        let productData = [];
-        let totalPages = 1;
-        let total = 0;
-
-        if (response.data.rows && Array.isArray(response.data.rows)) {
-          productData = response.data.rows;
-          totalPages = response.data.pages_count || 1;
-          total = response.data.count || 0;
-        } else if (response.data.data && Array.isArray(response.data.data)) {
-          productData = response.data.data;
-          totalPages = response.data.totalPages || 1;
-          total = response.data.total || 0;
-        } else if (Array.isArray(response.data)) {
-          productData = response.data;
-          totalPages = Math.ceil(response.data.length / limit);
-          total = response.data.length;
-        } else {
-          console.error("Unexpected product data format:", response.data);
-          productData = [];
-        }
-
-        setProducts(productData);
-        setPagesCount(totalPages);
-        setTotalCount(total);
-      } else {
-        setProducts([]);
-        setPagesCount(1);
-        setTotalCount(0);
+      let productData = [];
+      let totalPages = 1;
+      let total = 0;
+      if (response.data.rows && Array.isArray(response.data.rows)) {
+        productData = response.data.rows;
+        totalPages = response.data.pages_count || 1;
+        total = response.data.count || 0;
+      } else if (response.data.data && Array.isArray(response.data.data)) {
+        productData = response.data.data;
+        totalPages = response.data.totalPages || 1;
+        total = response.data.total || 0;
+      } else if (Array.isArray(response.data)) {
+        productData = response.data;
+        totalPages = Math.ceil(response.data.length / limit);
+        total = response.data.length;
       }
+      setProducts(productData);
+      setPagesCount(totalPages);
+      setTotalCount(total);
     } catch (error) {
-      console.error("Error fetching products:", error);
       toast.error("Failed to fetch products");
       setProducts([]);
       setPagesCount(1);
@@ -134,58 +108,41 @@ const [selectedSubCategory, setSelectedSubCategory] = useState(null);
     }
   };
 
+  // Fetch categories
   const fetchCategories = async () => {
     try {
       const response = await axios.get(`${BASEURL}/api/category`);
-
-      console.log("Categories response:", response.data);
-
-      if (response.data) {
-        let categoryData = [];
-
-        if (response.data.rows && Array.isArray(response.data.rows)) {
-          categoryData = response.data.rows;
-        } else if (response.data.data && Array.isArray(response.data.data)) {
-          categoryData = response.data.data;
-        } else if (Array.isArray(response.data)) {
-          categoryData = response.data;
-        }
-
-        setAllCategoryList(categoryData);
+      let categoryData = [];
+      if (response.data.rows && Array.isArray(response.data.rows)) {
+        categoryData = response.data.rows;
+      } else if (response.data.data && Array.isArray(response.data.data)) {
+        categoryData = response.data.data;
+      } else if (Array.isArray(response.data)) {
+        categoryData = response.data;
       }
+      setAllCategoryList(categoryData);
     } catch (error) {
-      console.error("Error fetching categories:", error);
       setAllCategoryList([]);
     }
   };
 
-  
-
-  // Fetch data when filters change
+  // Fetch products/categories on param change
   useEffect(() => {
-    const fetchAllData = async () => {
-      try {
-        await Promise.all([fetchProducts(), fetchCategories()]);
-      } catch (error) {
-        console.error("Error fetching data:", error);
-        toast.error("Failed to load data");
-      }
-    };
-
-    fetchAllData();
+    fetchProducts();
+    fetchCategories();
   }, [
     page,
     limit,
     selectedCategory,
     selectedSubCategory,
     searchQuery,
-    priceRange,
+    priceRange[0],
+    priceRange[1],
     sortBy,
     sortOrder,
-    location.state?.subcategory
   ]);
 
-  // Check cart status for products
+  // Cart status
   useEffect(() => {
     const checkCartStatus = async () => {
       if (authUtils.isAuthenticated() && products.length > 0) {
@@ -194,79 +151,62 @@ const [selectedSubCategory, setSelectedSubCategory] = useState(null);
           const cartProductIds = cartItems.map(
             (item) => item.productId?._id || item.productId
           );
-
           const newInCartStatus = {};
           products.forEach((product) => {
             newInCartStatus[product._id] = cartProductIds.includes(product._id);
           });
           setInCartStatus(newInCartStatus);
-        } catch (error) {
-          console.error("Error checking cart status:", error);
+        } catch {
+          // ignore
         }
       } else {
-        // Clear cart status if not authenticated
         setInCartStatus({});
       }
     };
-
     checkCartStatus();
-
-    // Listen for cart changes
-    const handleCartChange = () => {
-      checkCartStatus();
-    };
-
-    window.addEventListener("cart-changed", handleCartChange);
-
-    return () => {
-      window.removeEventListener("cart-changed", handleCartChange);
-    };
+    window.addEventListener("cart-changed", checkCartStatus);
+    return () =>
+      window.removeEventListener("cart-changed", checkCartStatus);
   }, [products]);
 
+  // Handlers
+  const navigateToProduct = (id) => {
+    navigate("/perticularproductpage", { state: { productId: id } });
+    window.scroll(0, 0);
+  };
+
   const handleAddToCart = async (product) => {
+    if (!authUtils.isAuthenticated()) {
+      toast.warning("Please login to add items to cart");
+      navigate("/login");
+      return;
+    }
+    if (!product || !product._id) {
+      toast.error("Invalid product data");
+      return;
+    }
+    setInCartStatus((prev) => ({
+      ...prev,
+      [product._id]: "loading",
+    }));
+
     try {
-      if (!authUtils.isAuthenticated()) {
-        toast.warning("Please login to add items to cart");
-        navigate("/login");
-        return;
-      }
-
-      // Validate product data
-      if (!product || !product._id) {
-        toast.error("Invalid product data");
-        return;
-      }
-
-      console.log("Adding product to cart:", product);
-
-      // Temporarily set loading state for this product
-      setInCartStatus((prev) => ({
-        ...prev,
-        [product._id]: "loading",
-      }));
-
-      // Add product to cart
       const result = await cartUtils.addToCart(product, 1, "M", "Default");
-
       if (result.success) {
         toast.success(result.message || "Product added to cart successfully!");
-        // Update in-cart status for this product
         setInCartStatus((prev) => ({
           ...prev,
           [product._id]: true,
         }));
       } else {
         toast.error(result.message || "Failed to add product to cart");
-        // Reset status on failure
         setInCartStatus((prev) => ({
           ...prev,
           [product._id]: false,
         }));
       }
-    } catch (error) {
-      console.error("Error adding to cart:", error);
+    } catch {
       toast.error("Failed to add to cart");
-      // Reset status on error
       setInCartStatus((prev) => ({
         ...prev,
         [product._id]: false,
@@ -274,109 +214,71 @@ const [selectedSubCategory, setSelectedSubCategory] = useState(null);
     }
   };
 
-  
-
-  const handleRemoveFromCart = async (product) => {
-    try {
-      if (!authUtils.isAuthenticated()) {
-        toast.warning("Please login to manage cart");
-        return;
-      }
-
-      console.log("Removing product from cart:", product);
-
-      // Temporarily set loading state for this product
-      setInCartStatus((prev) => ({
-        ...prev,
-        [product._id]: "loading",
-      }));
-
-      // Remove product from cart
-      const result = await cartUtils.removeFromCart(
-        product._id,
-        "M",
-        "Default"
-      );
-
-      if (result.success) {
-        toast.success("Product removed from cart");
-        // Update in-cart status for this product
-        setInCartStatus((prev) => ({
-          ...prev,
-          [product._id]: false,
-        }));
-      } else {
-        toast.error(result.message || "Failed to remove product from cart");
-        // Reset status on failure
-        setInCartStatus((prev) => ({
-          ...prev,
-          [product._id]: true,
-        }));
-      }
-    } catch (error) {
-      console.error("Error removing from cart:", error);
-      toast.error("Failed to remove from cart");
-      // Reset status on error
-      setInCartStatus((prev) => ({
-        ...prev,
-        [product._id]: true,
-      }));
-    }
-  };
-
-  const handleViewProduct = (productId) => {
-    navigate("/perticularproductpage", {
-      state: { productId },
+  const handleCategoryChange = (categoryId) => {
+    setSearchParams({
+      ...Object.fromEntries(searchParams),
+      category: categoryId,
+      subcategory: undefined,
+      page: 1,
     });
-    window.scroll(0, 0);
   };
 
-  const handleSearch = () => {
-    setPage(1);
-    fetchProducts();
+  const handleSubCategoryChange = (subCategoryId) => {
+    setSearchParams({
+      ...Object.fromEntries(searchParams),
+      subcategory: subCategoryId,
+      page: 1,
+    });
+  };
+
+  const handleSearchInput = (e) => {
+    setSearchParams({
+      ...Object.fromEntries(searchParams),
+      search: e.target.value,
+      page: 1,
+    });
   };
 
   const handlePriceChange = (event, newValue) => {
-    setPriceRange(newValue);
+    setSearchParams({
+      ...Object.fromEntries(searchParams),
+      minPrice: newValue[0],
+      maxPrice: newValue[1],
+      page: 1,
+    });
   };
 
- const handleCategoryChange = async (categoryId) => {
-  if (selectedCategory === categoryId) {
-    setSelectedCategory(null);
-    setAllSubCategoryList([]);
-    setSelectedSubCategory(null);
-  } else {
-    setSelectedCategory(categoryId);
-    setSelectedSubCategory(null);
-
-    // Fetch subcategories immediately
-    try {
-      const response = await axios.get(`${BASEURL}/api/subcategory?parent_category=${categoryId}`);
-      const subCategoryData = response.data.rows || response.data.data || response.data || [];
-      setAllSubCategoryList(subCategoryData);
-    } catch (err) {
-      console.error("Error fetching subcategories:", err);
-      setAllSubCategoryList([]);
-    }
-  }
-
-  setPage(1);
-};
-
+  const handleSortChange = (e) => {
+    const [sortField, sortOrd] = e.target.value.split("-");
+    setSearchParams({
+      ...Object.fromEntries(searchParams),
+      sortBy: sortField,
+      sortOrder: sortOrd,
+      page: 1,
+    });
+  };
 
   const handlePageChange = (event, value) => {
-    setPage(value);
-    window.scroll(0, 0);
+    setSearchParams({
+      ...Object.fromEntries(searchParams),
+      page: value,
+    });
+    window.scrollTo(0, 0);
   };
 
   const resetFilters = () => {
-    setSelectedCategory(null);
-    setSelectedSubCategory(null);
-    setSearchQuery("");
-    setPriceRange([0, 10000]);
-    setSortBy("name");
-    setSortOrder("asc");
-    setPage(1);
+    setSearchParams({
+      sortBy: "name",
+      sortOrder: "asc",
+      page: 1,
+      limit: 9,
+      minPrice: 0,
+      maxPrice: 10000,
+      search: "",
+      category: "",
+      subcategory: "",
+    });
+    setVisibleCategoryCount(6);
   };
 
   const handleViewMoreCategories = () => {
@@ -394,18 +296,12 @@ const [selectedSubCategory, setSelectedSubCategory] = useState(null);
     return category.category_name || category.name || "Category";
   };
 
-  const getProductName = (product) => {
-    return product.product_name || product.name || "Product";
-  };
-
-  const getProductPrice = (product) => {
-    return product.price || product.product_price || 0;
-  };
-
+  const getProductName = (product) =>
+    product.product_name || product.name || "Product";
+  const getProductPrice = (product) =>
+    product.price || product.product_price || 0;
   const getProductImage = (product) => {
-    // Handle different image field formats
     let imagePath = null;
-
     if (
       product.images &&
       Array.isArray(product.images) &&
@@ -417,19 +313,15 @@ const [selectedSubCategory, setSelectedSubCategory] = useState(null);
     } else if (product.product_image) {
       imagePath = product.product_image;
     }
-
     if (imagePath) {
-      // Check if the path already includes the base URL
       if (imagePath.startsWith("http")) {
         return imagePath;
       }
-      // Add base URL if it doesn't start with /
       if (!imagePath.startsWith("/")) {
         imagePath = "/" + imagePath;
       }
       return `${BASEURL}${imagePath}`;
     }
-
     return "/Images/placeholder.jpg";
   };
 
@@ -444,13 +336,12 @@ const [selectedSubCategory, setSelectedSubCategory] = useState(null);
     return originalPrice.toFixed(2);
   };
 
-  const renderStars = (rating) => {
-    return Array(5)
+  const renderStars = (rating) =>
+    Array(5)
       .fill()
       .map((_, i) => (
         <FaStar key={i} color={i < rating ? "#ffc107" : "#e4e5e9"} size={14} />
       ));
-  };
 
   // Calculate display range
   const start = (page - 1) * limit + 1;
@@ -475,22 +366,19 @@ const [selectedSubCategory, setSelectedSubCategory] = useState(null);
                       className="form-control"
                       placeholder="Search products..."
                       value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
+                      onChange={handleSearchInput}
                       onKeyPress={(e) => {
-                        if (e.key === "Enter") {
-                          handleSearch();
-                        }
+                        if (e.key === "Enter") handleSearchInput(e);
                       }}
                     />
                     <Button
-                      onClick={handleSearch}
+                      onClick={handleSearchInput}
                       className="search-button mt-2"
                     >
                       Search
                     </Button>
                   </div>
                 </div>
-
                 {/* Price Filter */}
                 <div className="filter-section">
                   <h4>Price Range</h4>
@@ -508,7 +396,6 @@ const [selectedSubCategory, setSelectedSubCategory] = useState(null);
                     </div>
                   </Box>
                 </div>
-
                 {/* Categories */}
                 <div className="filter-section">
                   <h4>Categories</h4>
@@ -556,57 +443,50 @@ const [selectedSubCategory, setSelectedSubCategory] = useState(null);
                     <p className="text-muted">No categories found</p>
                   )}
                 </div>
-
-
-                
-{/* Subcategories */}
-{allSubCategoryList.length > 0 && (
-  <div className="filter-section">
-    <h4>Subcategories</h4>
-    <ul className="category-list">
-      {allSubCategoryList
-        .slice(0, visibleCategoryCount) // optional if you want view more/less
-        .map((subcat) => (
-          <li
-            key={subcat._id}
-            className={`category-item ${
-              selectedSubCategory === subcat._id ? "active" : ""
-            }`}
-            onClick={() =>
-              setSelectedSubCategory(
-                selectedSubCategory === subcat._id ? null : subcat._id
-              )
-            }
-          >
-            {subcat.name || subcat.subcategory_name}
-          </li>
-        ))}
-    </ul>
-
-    {/* Optional View More / View Less for subcategories */}
-    {allSubCategoryList.length > 6 && (
-      <div className="view-toggle">
-        {visibleCategoryCount < allSubCategoryList.length ? (
-          <Button
-            onClick={() => setVisibleCategoryCount(allSubCategoryList.length)}
-            className="view-more-btn"
-          >
-            View More <MdKeyboardArrowDown size={20} />
-          </Button>
-        ) : (
-          <Button
-            onClick={() => setVisibleCategoryCount(6)}
-            className="view-more-btn"
-          >
-            View Less <MdKeyboardArrowUp size={20} />
-          </Button>
-        )}
-      </div>
-    )}
-  </div>
-)}
-
-
+                {/* Subcategories */}
+                {allSubCategoryList.length > 0 && (
+                  <div className="filter-section">
+                    <h4>Subcategories</h4>
+                    <ul className="category-list">
+                      {allSubCategoryList
+                        .slice(0, visibleCategoryCount)
+                        .map((subcat) => (
+                          <li
+                            key={subcat._id}
+                            className={`category-item ${
+                              selectedSubCategory === subcat._id ? "active" : ""
+                            }`}
+                            onClick={() => handleSubCategoryChange(subcat._id)}
+                          >
+                            {subcat.name || subcat.subcategory_name}
+                          </li>
+                        ))}
+                    </ul>
+                    {allSubCategoryList.length > 6 && (
+                      <div className="view-toggle">
+                        {visibleCategoryCount < allSubCategoryList.length ? (
+                          <Button
+                            onClick={() =>
+                              setVisibleCategoryCount(
+                                allSubCategoryList.length
+                              )
+                            }
+                            className="view-more-btn"
+                          >
+                            View More <MdKeyboardArrowDown size={20} />
+                          </Button>
+                        ) : (
+                          <Button
+                            onClick={() => setVisibleCategoryCount(6)}
+                            className="view-more-btn"
+                          >
+                            View Less <MdKeyboardArrowUp size={20} />
+                          </Button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
                 {/* Reset Filter */}
                 <div className="filter-section">
                   <h4>Reset Filters</h4>
@@ -620,50 +500,45 @@ const [selectedSubCategory, setSelectedSubCategory] = useState(null);
                 </div>
               </div>
             </div>
-
             {/* Product Grid */}
             <div className="col-lg-9 col-md-9">
               <div className="product-list-header">
-              <div className="col-lg-9 col-md-6 position-absolute">
-                <div className="d-flex justify-content-between align-items-center">
-                  <div className="product-count">
-                    <span>
-                      Showing {products.length > 0 ? start : 0}–{end} of{" "}
-                      {totalCount} results
-                    </span>
+                <div className="col-lg-9 col-md-6 position-absolute">
+                  <div className="d-flex justify-content-between align-items-center">
+                    <div className="product-count">
+                      <span>
+                        Showing {products.length > 0 ? start : 0}–{end} of{" "}
+                        {totalCount} results
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                <div className="col-lg-3 col-md-6 position-relative float-end">
+                  {/* Sort Options */}
+                  <div className="filter-section flex items-baseline d-flex">
+                    <h4 className="w-47">Sort By</h4>
+                    <select
+                      className="form-control"
+                      style={{ marginLeft: "10px" }}
+                      value={`${sortBy}-${sortOrder}`}
+                      onChange={handleSortChange}
+                    >
+                      <option value="random-asc">Relevance</option>
+                      <option value="price-asc">Price (Low to High)</option>
+                      <option value="price-desc">Price (High to Low)</option>
+                      <option value="createdAt-desc">Newest First</option>
+                      <option value="createdAt-asc">Oldest First</option>
+                    </select>
                   </div>
                 </div>
               </div>
-              <div className="col-lg-3 col-md-6 position-relative float-end">
-                 {/* Sort Options */}
-                <div className="filter-section flex items-baseline d-flex" >
-                  <h4 className="w-47">Sort By</h4>
-                  <select
-                    className="form-control" style={{width:"", marginLeft:"10px"}}
-                    value={`${sortBy}-${sortOrder}`}
-                    onChange={(e) => {
-                      const [field, order] = e.target.value.split("-");
-                      setSortBy(field);
-                      setSortOrder(order);
-                      setPage(1);
-                    }}
-                  >
-                   <option value="random-asc">Relevance</option>
-                    <option value="price-asc">Price (Low to High)</option>
-                    <option value="price-desc">Price (High to Low)</option>
-                    <option value="createdAt-desc">Newest First</option>
-                    <option value="createdAt-asc">Oldest First</option>
-                   
-                  </select>
-                </div>
-             
-              </div>
-              </div>
-
               <div className="products-container">
                 {loading ? (
                   <div className="text-center py-5">
-                    <div className="spinner-border text-primary" role="status">
+                    <div
+                      className="spinner-border text-primary"
+                      role="status"
+                    >
                       <span className="visually-hidden">Loading...</span>
                     </div>
                   </div>
@@ -673,7 +548,10 @@ const [selectedSubCategory, setSelectedSubCategory] = useState(null);
                     <p className="text-muted">
                       Try adjusting your search criteria or filters
                     </p>
-                    <Button onClick={resetFilters} className="btn btn-primary">
+                    <Button
+                      onClick={resetFilters}
+                      className="btn btn-primary"
+                    >
                       Reset Filters
                     </Button>
                   </div>
@@ -687,98 +565,126 @@ const [selectedSubCategory, setSelectedSubCategory] = useState(null);
                         sm={6}
                         className=""
                       >
-                        <Card className="costume-product-card" onClick={() => navigateToProduct(product.id || product._id)}>
-                    <div className="product-image-container">
-                      <Card.Img
-                        variant="top"
-                        src={getImageUrl(
-                          product.product_image ||
-                            (product.images && product.images.length > 0 ? product.images[0] : null),
-                        )}
-                        alt={product.product_name}
-                        className="particular-product-image"
-                        onError={(e) => {
-                          console.log("Image error:", e)
-                          e.target.src = "/placeholder.svg"
-                        }}
-                      />
-
-                      {product.images && product.images.length > 1 && (
-                    <Card.Img
-                  src={getImageUrl(product.images[1])}
-                   alt={`${product.product_name} hover`}
-                   className="product-image hover-image"
-                       onError={(e) => (e.target.src = "/placeholder.svg")}
-                     />
-                  )}
-                  
-
-                      <FaHeart className="heart-icon" />
-                      {inCartStatus[product.id || product._id] && (
-                        <Badge className="added-to-cart-badge" bg="success">
-                          Added to cart
-                        </Badge>
-                      )}
-                    </div>
-                    <Card.Body>
-                      <Card.Title className="card-product-title">{product.product_name}</Card.Title>
-                      <Card.Text className="product-description">
-                        {truncateText(product.description || product.product_description, 100)}
-                      </Card.Text>
-                      <div className="price-section">
-                        <div>
-                          <span className="price">
-                            ₹
-                            {product.discount_price && product.discount_price < product.price
-                              ? product.discount_price
-                              : product.price}
-                            .00
-                          </span>
-                          {product.discount_price && product.discount_price < product.price && (
-                            <span className="original-price">₹{product.price}.00</span>
-                          )}
-                          {!product.discount_price && (
-                            <span className="original-price">₹{discountAmount(product.price, 23)}</span>
-                          )}
-                        </div>
-                        <div className="position">
-                          <span className="discount">
-                            {product.discount_price && product.discount_price < product.price
-                              ? Math.round(((product.price - product.discount_price) / product.price) * 100)
-                              : 23}
-                            % Off
-                          </span>
-                        </div>
-                      </div>
-                      <div className="button-section">
-                        <Button
-                          variant="outline-dark"
-                          className="view-more-btn"
-                          onClick={(e) => {
-                            e.stopPropagation()
+                        <Card
+                          className="costume-product-card"
+                          onClick={() =>
                             navigateToProduct(product.id || product._id)
-                          }}
+                          }
                         >
-                          View More
-                        </Button>
-                        <Button
-                          className="add-to-cart-btn d-none"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleAddToCart(product)
-                          }}
-                        >
-                          Add to cart
-                        </Button>
-                      </div>
-                    </Card.Body>
-                  </Card>
+                          <div className="product-image-container">
+                            <Card.Img
+                              variant="top"
+                              src={getImageUrl(
+                                product.product_image ||
+                                  (product.images &&
+                                  product.images.length > 0
+                                    ? product.images[0]
+                                    : null)
+                              )}
+                              alt={product.product_name}
+                              className="particular-product-image"
+                              onError={(e) => {
+                                e.target.src = "/placeholder.svg";
+                              }}
+                            />
+                            {product.images && product.images.length > 1 && (
+                              <Card.Img
+                                src={getImageUrl(product.images[1])}
+                                alt={`${product.product_name} hover`}
+                                className="product-image hover-image"
+                                onError={(e) =>
+                                  (e.target.src = "/placeholder.svg")
+                                }
+                              />
+                            )}
+                            <FaHeart className="heart-icon" />
+                            {inCartStatus[product.id || product._id] && (
+                              <Badge
+                                className="added-to-cart-badge"
+                                bg="success"
+                              >
+                                Added to cart
+                              </Badge>
+                            )}
+                          </div>
+                          <Card.Body>
+                            <Card.Title className="card-product-title">
+                              {product.product_name}
+                            </Card.Title>
+                            <Card.Text className="product-description">
+                              {truncateText(
+                                product.description ||
+                                  product.product_description,
+                                100
+                              )}
+                            </Card.Text>
+                            <div className="price-section">
+                              <div>
+                                <span className="price">
+                                  ₹
+                                  {product.discount_price &&
+                                  product.discount_price < product.price
+                                    ? product.discount_price
+                                    : product.price}
+                                  .00
+                                </span>
+                                {product.discount_price &&
+                                  product.discount_price < product.price && (
+                                    <span className="original-price">
+                                      ₹{product.price}.00
+                                    </span>
+                                  )}
+                                {!product.discount_price && (
+                                  <span className="original-price">
+                                    ₹{discountAmount(product.price, 23)}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="position">
+                                <span className="discount">
+                                  {product.discount_price &&
+                                  product.discount_price < product.price
+                                    ? Math.round(
+                                        ((product.price -
+                                          product.discount_price) /
+                                          product.price) *
+                                          100
+                                      )
+                                    : 23}
+                                  % Off
+                                </span>
+                              </div>
+                            </div>
+                            <div className="button-section">
+                              <Button
+                                variant="outline-dark"
+                                className="view-more-btn"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  navigateToProduct(
+                                    product.id || product._id
+                                  );
+                                }}
+                              >
+                                View More
+                              </Button>
+                              <Button
+                                className="add-to-cart-btn d-none"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleAddToCart(product);
+                                }}
+                              >
+                                Add to cart
+                              </Button>
+                            </div>
+                          </Card.Body>
+                        </Card>
                       </Col>
                     ))}
                   </Row>
                 )}
               </div>
-
               {/* Pagination */}
               {pagesCount > 1 && (
                 <div className="pagination-container text-center mt-4">
