@@ -51,7 +51,7 @@ const navigateToCategory = (categoryId) => {
   <Col lg={2} md={4} sm={6} key={category._id}>
     <Card
       className="category-card"
-      onClick={() => navigateToCategory(category._id)}  // 👈 use _id if backend sends _id
+      onClick={() => navigate(`/shop?category=${category._id}`)}  // 👈 use _id if backend sends _id
       style={{ margin: "0px", boxShadow: "none" }}
     >
       <div className="category-image-container">

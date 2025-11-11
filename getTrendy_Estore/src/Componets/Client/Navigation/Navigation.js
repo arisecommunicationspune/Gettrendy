@@ -247,7 +247,7 @@ const Navigation = () => {
                     <NavDropdown.Item
                       key={category._id}
                       onClick={() => {
-                        navigateToShop(category._id)
+                        navigate(`/shop?category=${category._id}`)
                         handleNavClick()
                       }}
                       className="category-item" 

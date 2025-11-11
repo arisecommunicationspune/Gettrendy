@@ -97,7 +97,7 @@ const Categories = () => {
               <div key={subcategory._id || subcategory.id} style={{ padding: '0 10px' }}>
                 <Card
                   className="Subcategory-card"
-                  onClick={() => navigateToSubcategory(subcategory._id || subcategory.id)}
+                  onClick={() => navigate(`/shop?subcategory=${subcategory._id}`)}
                   style={{ cursor: "pointer" }}
                 >
                   <div className="Subcategory-image-container">
