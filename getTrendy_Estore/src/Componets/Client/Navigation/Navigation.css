@@ -913,6 +913,12 @@
   .cart-img-mobile {
     display: none;
   }
+
+  .lg-flex {
+    display: flex;
+    margin: auto;
+    padding-left: 10px;
+  }
 }
 
 @media (max-width: 991px) {

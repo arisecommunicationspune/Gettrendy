@@ -127,7 +127,7 @@ const Shop = () => {
   };
 
   // Fetch products/categories on param change
-  useEffect(() => {
+  useEffect(() => { window.scrollTo({ top: 0, left: 0, behavior: "smooth" });
     fetchProducts();
     fetchCategories();
   }, [
