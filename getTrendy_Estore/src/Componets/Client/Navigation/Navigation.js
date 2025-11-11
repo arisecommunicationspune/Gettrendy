@@ -229,13 +229,13 @@ const Navigation = () => {
               {/* Categories Dropdown */}
               <NavDropdown
                 title={
-                  <span className="d-flex align-items-center" style={{ padding: "10px"}}>
+                  <span className="d-flex align-items-center" >
                     {" "}
                     {/* 👇 Add SVG Icon */}
                     <img
                       src={caticon}
                       alt="Categories Icon"
-                      style={{ width: "40px", height: "auto", marginRight: "6px" }}
+                      style={{ width: "36px", height: "auto", marginRight: "3px" }}
                     />
                     Categories
                   </span>
@@ -272,7 +272,7 @@ const Navigation = () => {
                 &nbsp; Contact
               </Nav.Link>
 
-              <Nav.Link href="/Wishlist" active={location.pathname === "/Wishlist"} onClick={handleNavClick}>
+              {/* <Nav.Link href="/Wishlist" active={location.pathname === "/Wishlist"} onClick={handleNavClick}>
                 <svg
                   width="26"
                   height="27"
@@ -288,10 +288,10 @@ const Navigation = () => {
                   <path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 1 0-7.8 7.8l1 1L12 21l7.8-7.8 1-1a5.5 5.5 0 0 0 0-7.8z" />
                 </svg>
                 &nbsp;
-              </Nav.Link>
+              </Nav.Link> */}
 
               {/* FIXED: Moved cart and user menu inside the main Nav */}
-              <div className="d-flex align-items-center ms-auto">
+              <div className=" align-items-center lg-flex">
                 {/* Cart */}
                 {isAuthenticated && (
                   <Nav.Link
